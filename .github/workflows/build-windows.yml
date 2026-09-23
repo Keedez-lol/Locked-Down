@@ -1,0 +1,58 @@
+name: Build NetScan (Windows portable .exe)
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "netscan/**"
+      - ".github/workflows/build-windows.yml"
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: netscan
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller==6.11.1
+
+      - name: Fetch OUI vendor database
+        run: python tools/fetch_oui.py
+
+      - name: Build portable executable
+        run: pyinstaller --noconfirm netscan.spec
+
+      - name: Smoke-check the binary exists
+        run: |
+          if (!(Test-Path dist/NetScan.exe)) { throw "NetScan.exe was not produced" }
+          Get-Item dist/NetScan.exe | Select-Object Name, Length
+
+      - name: Upload portable .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetScan-portable-windows
+          path: netscan/dist/NetScan.exe
+          if-no-files-found: error
+
+      - name: Attach to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: netscan/dist/NetScan.exe

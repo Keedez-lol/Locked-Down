@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller build output
+netscan/build/
+netscan/dist/
+*.manifest
+
+# Generated OUI database (fetched at build time)
+netscan/data/oui.csv
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
