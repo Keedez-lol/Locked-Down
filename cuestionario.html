@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cuestionario Locked Down</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{--paper:#ece7dc;--paper2:#e3ded2;--ink:#0c0c0d;--ink2:#3a3733;--ink3:#7b776e;--rule:rgba(12,12,13,.22);--rule2:rgba(12,12,13,.5);--verm:#e8401c;--mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--sans:"IBM Plex Sans","Helvetica Neue",Helvetica,Arial,sans-serif;color-scheme:light}
+*{box-sizing:border-box;margin:0;padding:0}
+html{height:100%}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 var(--sans);padding-inline:16px;padding-block:0 120px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,textarea{font:inherit;color:inherit;background:transparent;border:0;outline:0}
+.sheet{max-width:780px;margin:0 auto}
+.head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 24px;padding:22px 0 12px;border-bottom:1px solid var(--rule2);font:500 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase}
+.head span{white-space:nowrap}
+.title{padding:36px 0 18px;display:grid;gap:14px}
+.title h1{font:600 clamp(28px,6vw,46px)/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;text-wrap:balance}
+.title p{max-width:62ch;color:var(--ink2)}
+.title .how{display:grid;gap:6px;padding:14px 16px;border:1px solid var(--rule2);font-size:14px}
+.title .how b{font:500 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:6px}
+.legend{display:flex;flex-wrap:wrap;gap:12px 22px;padding:12px 0 24px;font:500 10px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.legend i{display:inline-block;width:10px;height:10px;border:1px solid var(--ink);vertical-align:-1px;margin-right:6px}
+.legend i.sel{background:var(--ink)}
+.legend i.rec{border-color:var(--verm);background:var(--verm)}
+.section{margin-top:34px;padding-top:12px;border-top:1px solid var(--rule2);display:flex;justify-content:space-between;align-items:baseline;gap:12px;font:500 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase}
+.section em{font-style:normal;color:var(--ink3)}
+.q{display:grid;grid-template-columns:44px 1fr;gap:10px 14px;padding:22px 0 20px;border-top:1px solid var(--rule)}
+.q:first-of-type{border-top:0}
+.q .n{font:500 12px/1.6 var(--mono);color:var(--ink3);letter-spacing:.06em}
+.q.done .n{color:var(--ink)}
+.q .n::after{content:"";display:block;width:6px;height:6px;margin-top:6px;border:1px solid var(--ink3)}
+.q.done .n::after{background:var(--ink);border-color:var(--ink)}
+.q h3{font:500 16px/1.35 var(--sans);text-wrap:balance}
+.q .why{color:var(--ink2);font-size:13.5px;margin-top:4px;max-width:66ch}
+.opts{grid-column:2;display:grid;gap:6px;margin-top:8px}
+.opt{display:grid;grid-template-columns:26px 1fr;align-items:start;gap:10px;padding:8px 10px 8px 8px;border:1px solid var(--rule);text-align:left;line-height:1.35;transition:border-color .12s,background .12s;position:relative}
+.opt:hover{border-color:var(--ink)}
+.opt:focus-visible{outline:2px solid var(--verm);outline-offset:1px}
+.opt .l{font:500 12px/1 var(--mono);letter-spacing:.04em;border:1px solid var(--ink);width:22px;height:22px;display:grid;place-items:center}
+.opt.rec .l{border-color:var(--verm);color:var(--verm)}
+.opt.rec{padding-right:104px}
+@media (max-width:520px){.opt.rec{padding-right:10px;padding-top:22px}.opt .tag{top:5px;left:44px;right:auto}}
+.opt.sel{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.opt.sel .l{border-color:var(--paper);color:var(--paper)}
+.opt .tag{position:absolute;right:8px;top:6px;font:500 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--verm)}
+.opt.sel .tag{color:var(--paper)}
+.other{grid-column:2;display:flex;gap:8px;align-items:center;margin-top:4px;border-bottom:1px solid var(--rule)}
+.other label{font:500 9px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);white-space:nowrap}
+.other input{flex:1;padding:6px 0;min-width:0}
+.other input::placeholder{color:var(--ink3)}
+.ideas{margin-top:34px;padding-top:14px;border-top:1px solid var(--rule2)}
+.ideas h2{font:500 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;margin-bottom:10px}
+.ideas p{color:var(--ink2);font-size:13.5px;margin-bottom:10px;max-width:66ch}
+.ideas textarea{width:100%;min-height:120px;padding:10px 12px;border:1px solid var(--rule2);resize:vertical;line-height:1.45}
+.out{margin-top:26px;display:grid;gap:8px}
+.out h2{font:500 11px/1 var(--mono);letter-spacing:.18px;text-transform:uppercase;letter-spacing:.18em}
+.out textarea{width:100%;min-height:96px;padding:10px 12px;border:1px solid var(--rule2);font:13px/1.5 var(--mono);resize:vertical;background:var(--paper2)}
+.out .note{font-size:13px;color:var(--ink2)}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+.bar .inner{width:100%;max-width:780px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.bar .prog{font:500 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;display:flex;align-items:center;gap:10px;flex:1;min-width:180px}
+.bar .prog .track{flex:1;height:1px;background:rgba(236,231,220,.3);position:relative}
+.bar .prog .track i{position:absolute;left:0;top:-1px;height:3px;background:var(--paper);width:0;transition:width .2s}
+.btn{font:500 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;padding:11px 16px;border:1px solid var(--paper);color:var(--paper);white-space:nowrap}
+.btn:hover{background:var(--paper);color:var(--ink)}
+.btn.primary{background:var(--verm);border-color:var(--verm);color:var(--paper)}
+.btn.primary:hover{background:#f0704f;border-color:#f0704f;color:var(--ink)}
+.btn.ghost{border-color:rgba(236,231,220,.35)}
+.btn:focus-visible{outline:2px solid var(--verm);outline-offset:2px}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--paper);color:var(--ink);border:1px solid var(--ink);padding:8px 14px;font:500 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+.foot{margin-top:40px;padding-top:12px;border-top:1px solid var(--rule2);display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 24px;font:500 10px/1.5 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+@media (max-width:520px){.q{grid-template-columns:34px 1fr}.opts,.other{grid-column:1/-1}.bar .inner{gap:8px}.btn{padding:10px 12px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="head"><span>Locked Down / Cuestionario de diseño</span><span>DWG NO. LD-Q50 &nbsp; REV A</span><span>50 preguntas</span></div>
+  <div class="title">
+    <h1>Cuestionario<br>de diseño</h1>
+    <p>Cada respuesta cambia una decisión concreta del juego. Las opciones marcadas en bermellón son las que yo aplicaría por defecto; si te da igual, déjalas. Al final hay un campo libre para ideas.</p>
+    <div class="how"><b>Cómo funciona</b><span>1. Pulsa una opción por pregunta (o escribe otra en la línea «otra»).</span><span>2. Se guarda en este navegador mientras vas contestando.</span><span>3. Al terminar pulsa <strong>COPIAR RESPUESTAS</strong> y pégame el texto en el chat. También puedes copiar solo el bloque de abajo.</span></div>
+  </div>
+  <div class="legend"><span><i class="sel"></i>Seleccionada</span><span><i class="rec"></i>Recomendada por Claude</span><span>Puedes cambiar cualquier respuesta después</span></div>
+  <div id="qs"></div>
+  <div class="ideas"><h2>Ideas y notas libres</h2><p>Cualquier cosa que quieras ver en el juego, referencias (Factorio, GregTech, Mindustry, Dyson Sphere...), cosas que odias, mecánicas concretas. Sin límite.</p><textarea id="ideas" placeholder="Escribe aquí..."></textarea></div>
+  <div class="out"><h2>Respuestas (texto para pegar)</h2><textarea id="out" readonly></textarea><div class="note">Formato: número + letra; el asterisco indica que hay texto libre y aparece debajo. Las preguntas sin contestar se aplican con la recomendación.</div></div>
+  <div class="foot"><span>Locked Down · hoja Q50</span><span id="stamp"></span></div>
+</div>
+<div class="bar"><div class="inner"><div class="prog"><span id="prog">0 / 50</span><span class="track"><i id="progbar"></i></span></div><button class="btn ghost" id="clear" type="button">Borrar</button><button class="btn primary" id="copy" type="button">Copiar respuestas</button></div></div>
+<div class="toast" id="toast">Copiado</div>
+<script>
+(() => {
+'use strict';
+const S = [
+['A', 'Identidad y presentación'],
+['B', 'Mundo y capas'],
+['C', 'Economía y logística'],
+['D', 'Construcción e integridad'],
+['E', 'Defensa'],
+['F', 'Investigación y enciclopedia'],
+['G', 'Sensaciones y prioridades']
+];
+// [section, question, why, [options], recommendedIndex]
+const Q = [
+['A', '¿Nombre del juego?', 'El repositorio se llama Locked Down; encaja con la premisa: estás encerrado sobre cinco estratos y solo puedes bajar.', ['LOCKED DOWN', 'Otro (escríbelo en «otra»)'], 0],
+['A', '¿Idioma de la interfaz?', 'Todo el texto del juego (nombres de 250+ objetos, enciclopedia, guías) se escribe una vez por idioma.', ['Solo español', 'Español e inglés conmutables en ajustes'], 0],
+['A', '¿Paleta dentro de la partida?', 'El menú va sobre el papel hueso de la animación KDZ. En partida el mundo (cuevas, magma) pide oscuridad para que la luz de las máquinas luzca.', ['HUD tinta oscura (paneles #0c0c0d, texto hueso, acento bermellón)', 'Todo en papel hueso claro como el menú', 'Mixta: HUD oscuro y enciclopedia/menús en hoja de papel'], 2],
+['A', '¿Composición del menú principal sobre la animación?', 'La animación ocupa toda la hoja; hay que elegir dónde vive el menú sin taparla de forma torpe.', ['Bloque de tinta a la izquierda (como el «slab» de la animación) con título y opciones', 'Opciones centradas sobre recuadros «knock-out» de papel', 'Cajetín técnico abajo a la derecha (title block) con las opciones', 'Decide tú'], 0],
+['A', '¿Cómo se dibuja el título?', 'Puedo construir el logotipo con la misma pluma monolínea que las letras KDZ (trazos y arcos) o usar tipografía monoespaciada.', ['Logotipo monolínea dibujado con la geometría de KDZ', 'Texto monoespaciado con tracking ancho', 'Ambos: logotipo dibujado + subtítulo mono'], 2],
+['A', '¿Música del menú?', 'La animación marca 133 BPM en el acto III y tiene aire de hoja técnica suiza. Todo se sintetiza en Web Audio, sin archivos.', ['Drone cálido con campanillas pentatónicas escasas y reverb', 'Pulso electrónico minimalista sincronizado a 133 BPM', 'Piano ambiental lento con mucha cola', 'Viento y graves industriales (casi ruido)'], 0],
+['A', '¿Música dentro de la partida?', 'El usuario pidió sonidos de máquinas cuidados; la música podría competir con ellos.', ['No: solo ambiente por capa y sonidos de máquinas', 'Capa musical muy sutil por estrato (cambia al bajar)', 'Música completa por estrato'], 1],
+['A', '¿Qué hacer fuera del área 16:9?', 'El juego es 16:9 fijo; si la ventana no lo es quedan bandas.', ['Bandas negras (letterbox limpio)', 'Bandas con textura de papel o tinta a juego con la pantalla actual'], 1],
+['B', '¿Tamaño de la superficie?', 'Más casillas = más yacimientos y más espacio, pero más coste de render y partidas más largas.', ['160 × 120 casillas (~19 000)', '256 × 192 casillas (~49 000, muy amplio)', '120 × 90 casillas'], 0],
+['B', '¿Cómo se expande el territorio?', 'La expansión es la forma de llegar a nuevos yacimientos.', ['Por parcelas 16×16 adyacentes pagando materiales (coste sube con la distancia)', 'Radio creciente alrededor del almacén', 'Parcelas + tecnología de «cartografía» que desbloquea anillos'], 0],
+['B', '¿Yacimientos finitos o infinitos?', 'Los finitos empujan a expandirse; los infinitos permiten dejar el juego en idle sin cuidarlo.', ['Finitos y grandes (se agotan y hay que expandir)', 'Infinitos con rendimiento que decae', 'Finitos en superficie y cuevas, infinitos en el núcleo'], 2],
+['B', '¿Ciclo día/noche en superficie?', 'Afecta a paneles solares y a la agresividad de las oleadas.', ['Sí, 10 min por día, oleadas nocturnas más fuertes', 'Sí, solo estético', 'No'], 0],
+['B', '¿Clima (lluvia, tormentas que reducen solar/eólica y añaden ambiente)?', 'Es sobre todo ambiente visual y sonoro, con un efecto pequeño en la energía.', ['Sí', 'No'], 0],
+['B', '¿Cómo se relacionan las capas inferiores con la superficie?', 'Mapas independientes es más simple y permite tamaños distintos por estrato.', ['Mapa independiente por estrato, cada uno con su elevador central', 'Misma cuadrícula X/Y que la superficie (columnas verticales bajo cada pozo)'], 0],
+['B', '¿Iluminación en cuevas?', 'Un mapa de luz hace que máquinas, lámparas y cristales iluminen la oscuridad.', ['Oscuridad real + luz de máquinas, lámparas, cristales y magma', 'Cuevas siempre visibles, oscuridad solo como tinte'], 0],
+['B', '¿Cómo mostrar el avance entre estratos?', 'Pediste una marca clara de progreso entre capas.', ['Sección transversal vertical permanente en el HUD (5 bandas, profundidad del pozo, capas bloqueadas rayadas)', 'Solo pestañas 1–5', 'Ambos: sección + pestañas'], 2],
+['C', '¿Modelo de inventario?', 'Un inventario global simplifica todo; por máquina sería otro juego.', ['Global único: todo lo producido llega al almacén', 'Uno por estrato, los elevadores transfieren con caudal limitado', 'Buffers por máquina (muy complejo)'], 1],
+['C', '¿Cómo funcionan las cintas?', 'Cintas reales con objetos moviéndose duplican la complejidad y bajan el rendimiento con miles de objetos.', ['Abstractas: cada máquina necesita una cinta adyacente conectada al almacén; el nivel de cinta limita su caudal', 'Cintas reales con objetos visibles moviéndose', 'Sin cintas: radio de alcance del almacén'], 0],
+['C', '¿Cables eléctricos?', 'Separar cables de cintas añade una segunda red que tender.', ['Integrados en las cintas (una sola red logística+eléctrica)', 'Cables separados que hay que tender', 'Energía sin red: llega a toda estructura del mismo estrato'], 0],
+['C', '¿Selección de receta en cada máquina?', 'Con cientos de máquinas la selección manual cansa; la automática pierde control.', ['Manual por máquina', 'Automática: la máquina rota entre recetas con insumos', 'Manual + botón «aplicar a todas las máquinas iguales»'], 2],
+['C', '¿Procesado de menas?', 'Cuanto más larga la cadena, más GregTech.', ['Simple: 1 mena → 1 lingote; la trituradora dobla', 'Larga: triturar, lavar, centrifugar, subproductos por mena', 'Intermedia: triturar dobla, lavar da subproductos en profundidad'], 2],
+['C', '¿Fluidos?', 'Tratarlos como objetos evita una red de tuberías.', ['Como objetos (litros en el almacén)', 'Tanques y tuberías propias'], 0],
+['C', '¿Límite de almacenamiento por objeto?', 'Los límites dan sentido a los almacenes y evitan acumular infinito.', ['Sí, ampliable construyendo almacenes', 'Sin límite'], 0],
+['C', '¿Progreso sin conexión (offline)?', 'Es un idle: ¿cuánto avanza mientras no juegas?', ['Hasta 8 h al 60 % de eficiencia', 'Hasta 24 h al 100 %', 'Sin progreso offline'], 0],
+['C', '¿Cómo funciona el overclock?', 'Pediste subir una máquina al siguiente nivel sin materiales especiales a cambio del doble de energía.', ['+1 nivel por escalón: ×2 energía, ×1,5 velocidad, ×3 desgaste (máx. 2–3 escalones)', 'Solo desbloquea el nivel siguiente por ×2 energía, sin cambiar velocidad', 'GregTech clásico: ×2 velocidad y ×4 energía por escalón'], 0],
+['C', '¿Recolección manual al principio (clic en árboles y rocas)?', 'Marca el arranque medieval antes de la primera cabaña.', ['Sí, con enfriamiento entre clics', 'Sí, sin límite', 'No: todo por estructuras desde el segundo cero'], 0],
+['D', '¿Orientación de las máquinas?', 'Con cintas abstractas no hace falta rotar nada.', ['Sin orientación', 'Con 4 orientaciones (solo estético)'], 0],
+['D', '¿Planos / copiar-pegar grupos de estructuras?', 'Ahorra tiempo en mitad de partida; cuesta bastante hacerlo bien.', ['Sí, desde el principio', 'Más adelante, no en esta versión'], 1],
+['D', '¿Desgaste por uso además del daño enemigo?', 'Da sentido a la reparación y al taller de mantenimiento.', ['Sí: una máquina a plena carga tarda ~7 h en llegar a 0 %', 'Solo daño por enemigos y por calor del núcleo'], 0],
+['D', '¿Reparación?', 'Con integridad < 30 % la velocidad cae un 3 % por punto.', ['Manual pagando materiales + taller automático de mantenimiento', 'Solo manual', 'Automática gratuita y lenta'], 0],
+['D', '¿Tiempos de construcción?', 'Pediste segundos para un generador de vapor y ~1 min para fusión.', ['1 s cinta → 60 s reactor de fusión', 'Más lentos (hasta 3 min los grandes)', 'Más rápidos (máx. 20 s)'], 0],
+['D', '¿Qué pasa si destruyen el almacén central?', 'Define si la defensa puede hacerte perder.', ['Indestructible: nunca baja del 10 % de integridad, pero se ralentiza', 'Fin de la partida', 'Se destruye y se reconstruye con penalización'], 0],
+['D', '¿Calor del núcleo?', 'La capa 5 debe exigir maquinaria chapada en placas térmicas.', ['Sin blindaje térmico se puede construir pero pierde integridad sin parar', 'Sin blindaje no se puede construir en el núcleo'], 0],
+['E', '¿Frecuencia de oleadas en dificultad normal?', 'Tiempo entre oleadas en cada estrato.', ['Cada 4–8 min', 'Cada 10–15 min', 'Cada 2–3 min'], 0],
+['E', '¿Comportamiento de los enemigos?', 'Más inteligencia = más CPU y más código; menos = más tonto.', ['Van a la estructura más cercana y rompen muros que estorban', 'Buscan camino real (pathfinding) hasta el almacén rodeando muros', 'Aleatorio/errático'], 0],
+['E', '¿Munición?', 'La munición añade cadenas (flechas, proyectiles, pólvora).', ['Torres primitivas gastan munición; láser y plasma solo energía', 'Todas las torres gastan munición', 'Ninguna gasta munición'], 0],
+['E', '¿De qué depende la amenaza?', 'Es el «reloj» que hace crecer las oleadas.', ['Tiempo + número de estructuras en ese estrato', 'Solo del tiempo', 'De la extracción (el ruido de taladros atrae)'], 0],
+['E', '¿Eventos especiales (terremotos, tormentas de plasma, migraciones)?', 'Dan variedad pero pueden molestar en modo idle.', ['Sí, avisados con antelación', 'No'], 0],
+['E', '¿Ver el alcance de las torres?', 'Círculos de rango en pantalla.', ['Al colocar y al seleccionar (y opción de verlos siempre)', 'Solo al colocar'], 0],
+['F', '¿Modelo de investigación?', 'Los laboratorios producen puntos de ciencia a partir de «paquetes» fabricados.', ['Instantánea al pagar puntos', 'Con tiempo de investigación en el laboratorio', 'Ambas: pagas y el laboratorio tarda'], 0],
+['F', '¿Tamaño del árbol tecnológico?', 'Cada tecnología desbloquea máquinas y recetas.', ['~100 tecnologías en 8 eras', '~60 tecnologías', '150 o más'], 0],
+['F', '¿Enciclopedia por descubrimiento?', 'Las entradas se revelan al obtener un objeto o desbloquear una máquina.', ['Sí, con «???» y una pista de cómo descubrirlo', 'Todo visible desde el inicio'], 0],
+['F', '¿Guía de «siguiente paso»?', 'Pediste que la enciclopedia diga qué ir haciendo.', ['Lista de objetivos sugeridos en la enciclopedia', 'Solo el árbol tecnológico', 'Tutorial guiado los primeros minutos + lista de objetivos'], 2],
+['F', '¿Estadísticas de producción con gráficos?', 'Producción/consumo por objeto y potencia en el tiempo.', ['Sí', 'No hace falta'], 0],
+['G', '¿Intensidad de partículas por defecto?', 'Se puede cambiar en ajustes.', ['Alta', 'Media'], 0],
+['G', '¿Sonido de máquinas?', 'Mezclar por tipo es más barato y no satura; el posicional es más inmersivo.', ['Mezcla por tipo de máquina visible con limitador', 'Cada máquina suena de forma individual y posicional (más CPU)'], 0],
+['G', '¿Cámara?', 'Desplazamiento con WASD/arrastre y zoom con rueda.', ['Zoom libre 0,5×–3×', 'Zoom por niveles fijos'], 0],
+['G', '¿Tamaño de casilla base?', 'Más píxeles por casilla = más detalle en las máquinas y menos casillas en pantalla.', ['32 px', '48 px'], 0],
+['G', '¿Duración total hasta el reactor de fusión?', 'Horas de juego activo aproximadas (el offline cuenta al 60 %).', ['~30 h', '~15 h', '~60 h'], 0],
+['G', 'Si hay que recortar, ¿qué proteges primero?', 'Orden de prioridad si algo no cabe.', ['Estética y sensación', 'Profundidad de sistemas', 'Cantidad de contenido', 'Rendimiento'], 0]
+];
+const KEY = 'ldq50.v1';
+let A = {};
+try { A = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { A = {}; }
+const root = document.getElementById('qs');
+const letters = 'ABCDE';
+let lastSection = null;
+Q.forEach((q, i) => {
+  const [sec, title, why, opts, rec] = q, n = i + 1;
+  if (sec !== lastSection) { lastSection = sec; const s = S.find(x => x[0] === sec); const el = document.createElement('div'); el.className = 'section'; el.innerHTML = '<span>' + s[0] + ' · ' + s[1] + '</span><em>' + Q.filter(x => x[0] === sec).length + ' preguntas</em>'; root.appendChild(el); }
+  const el = document.createElement('div'); el.className = 'q'; el.id = 'q' + n;
+  el.innerHTML = '<div class="n">' + String(n).padStart(2, '0') + '</div><div><h3>' + title + '</h3><div class="why">' + why + '</div></div><div class="opts"></div><div class="other"><label for="o' + n + '">otra / nota</label><input id="o' + n + '" placeholder="Escribe si ninguna opción encaja o quieres matizar"></div>';
+  const box = el.querySelector('.opts');
+  opts.forEach((o, j) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'opt' + (j === rec ? ' rec' : ''); b.dataset.q = n; b.dataset.o = letters[j];
+    b.innerHTML = '<span class="l">' + letters[j] + '</span><span>' + o + '</span>' + (j === rec ? '<span class="tag">recomendada</span>' : '');
+    b.addEventListener('click', () => { A[n] = Object.assign({}, A[n], { c: letters[j] }); persist(); render(); });
+    box.appendChild(b);
+  });
+  const inp = el.querySelector('input');
+  inp.addEventListener('input', () => { A[n] = Object.assign({}, A[n], { t: inp.value }); persist(); render(false); });
+  root.appendChild(el);
+});
+const ideas = document.getElementById('ideas');
+ideas.addEventListener('input', () => { A.ideas = ideas.value; persist(); render(false); });
+function persist() { try { localStorage.setItem(KEY, JSON.stringify(A)); } catch (e) { /* sin almacenamiento */ } }
+function answerLine() {
+  const parts = [], notes = [];
+  Q.forEach((q, i) => {
+    const n = i + 1, a = A[n] || {}, c = a.c || letters[q[4]] + '?';
+    parts.push(n + c + (a.t ? '*' : ''));
+    if (a.t) notes.push(n + ': ' + a.t.trim());
+  });
+  let s = 'LD-Q50 | ' + parts.join(' ');
+  if (notes.length) s += '\nNOTAS | ' + notes.join(' || ');
+  if (A.ideas && A.ideas.trim()) s += '\nIDEAS | ' + A.ideas.trim().replace(/\s*\n+\s*/g, ' / ');
+  return s;
+}
+function render(full = true) {
+  let done = 0;
+  Q.forEach((q, i) => {
+    const n = i + 1, a = A[n] || {}, el = document.getElementById('q' + n);
+    if (a.c) done++;
+    el.classList.toggle('done', !!a.c);
+    if (full) {
+      el.querySelectorAll('.opt').forEach(b => b.classList.toggle('sel', b.dataset.o === a.c));
+      const inp = el.querySelector('input'); if (inp.value !== (a.t || '')) inp.value = a.t || '';
+    }
+  });
+  if (full && ideas.value !== (A.ideas || '')) ideas.value = A.ideas || '';
+  document.getElementById('prog').textContent = done + ' / ' + Q.length;
+  document.getElementById('progbar').style.width = (done / Q.length * 100) + '%';
+  document.getElementById('out').value = answerLine();
+}
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('on'), 1800); }
+document.getElementById('copy').addEventListener('click', () => {
+  const text = answerLine(), out = document.getElementById('out');
+  const fallback = () => { out.focus(); out.select(); try { document.execCommand('copy'); toast('Copiado (selección)'); } catch (e) { toast('Selecciona el texto de abajo y cópialo'); } };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast('Copiado: pégalo en el chat')).catch(fallback); else fallback();
+});
+document.getElementById('clear').addEventListener('click', () => {
+  const b = document.getElementById('clear');
+  if (b.dataset.arm) { A = {}; persist(); render(); delete b.dataset.arm; b.textContent = 'Borrar'; toast('Respuestas borradas'); return; }
+  b.dataset.arm = '1'; b.textContent = '¿Seguro? Pulsa otra vez'; setTimeout(() => { delete b.dataset.arm; b.textContent = 'Borrar'; }, 3000);
+});
+document.getElementById('stamp').textContent = 'Hoja generada ' + new Date().toLocaleDateString('es-ES');
+render();
+})();
+</script>
+</body>
+</html>

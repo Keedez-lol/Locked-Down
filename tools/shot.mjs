@@ -1,0 +1,10 @@
+import { chromium } from 'playwright';
+const [,, url, out, w = '1200', h = '900'] = process.argv;
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: +w, height: +h } });
+const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+await p.goto(url.startsWith('http') ? url : 'file://' + process.cwd() + '/' + url);
+await p.waitForTimeout(1200);
+await p.screenshot({ path: out, fullPage: process.argv.includes('--full') });
+console.log('shot', out, errs.length ? 'ERRORS: ' + errs.join(' | ') : 'no errors');
+await b.close();
