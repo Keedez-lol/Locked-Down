@@ -24,6 +24,10 @@ Rama: `claude/exciting-tesla-vgb2ey`. Todo lo listado como "hecho" está en `src
 ## Notas de integración conocidas
 Ver `docs/INTEGRATION_NOTES.md`. Resumen: convención `_wantPower` = vatios base (Power aplica 2^oc); partículas en píxeles de mundo (casilla·48); `Fluids` solo reconoce pozos/bombas con `nature.out:{water:…}`; extractores de terreno (cantera, arcilla, arena, turba, salinas) van como `nature` con `terrain`; `Render.showRanges` y `Particles.setQuality` ya se propagan desde `main.js`.
 
-## Correcciones de descubribilidad pendientes (tras la pasada de QA de interfaz)
-- Tutorial: paso explícito «haz tablones en el Almacén central (receta Tablón)»; el almacén es la mesa de fabricación manual y no se explica.
-- Panel del Almacén central: encabezado «Fabricación manual» sobre la lista de recetas.
+## Hecho tras la primera prueba del usuario
+- Menú: hoja KDZ reestructurada a 1:1 (1080×1080, retícula 8×8) a la derecha del bloque de tinta; sin subtítulo, sin pie «FIG. 1», sin «SCALE 1:1», sin miras laterales ni numeral romano.
+- Tutorial plegable (▾) y paso de recolección con tablones en el Almacén central; cabecera «Fabricación manual» en el panel del almacén.
+- Lotes: AUTO / ×1 / ×5 / ×10 / ×25 / n por máquina (`Economy.setJobs`, `inst.jobs`).
+- Flecha con punta de piedra desde el inicio; más sílex al picar roca.
+- Niebla anclada al mapa; sin pista duplicada en el lienzo en modo mano.
+- Música del menú: en curso (agente) — pulso a 133 BPM sincronizado con el ciclo de la animación, macroestructura de 8 ciclos.
