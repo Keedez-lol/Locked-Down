@@ -40,3 +40,6 @@
 ## hud/build/panel UI (done)
 - Settings should call Render.showRanges(v) on 'ranges' change → add in main.js settings:changed handler.
 - Render.hintOffset should be set to tray height → check.
+## enemies.js + layers.js (done)
+- magma is an infinite fluid deposit h6 with no dedicated extractor in canon → structures.js must let brine_pump (or a fluid extractor with hardnessMax ≥ 6) pump magma (extract.res include 'magma').
+- Validator needs pumpjack hardnessMax ≥2, gas_well ≥3, brine_pump ≥6, he3_collector ≥7.
