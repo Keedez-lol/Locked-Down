@@ -3,7 +3,7 @@
 const LD = window.LD;
 const TAU = Math.PI * 2;
 const BPM = 400 / 3, BEAT = 60 / BPM, STEP = BEAT / 4, BAR = BEAT * 4;   // 133.33 BPM = the KDZ animation's 0.45 s beat
-const LOOK = 0.4, XFADE = 3, MENU_LEVEL = 1, BED_LEVEL = 0.56 /* −8 dB vs menu peaks, measured */, PRE = 0.5, TRIM = 0.32 /* menu peaks ≈ −14 dBFS */, DUCK = 0.355 /* −9 dB */;
+const LOOK = 0.4, XFADE = 3, MENU_LEVEL = 1, BED_LEVEL = 0.26 /* beds ≈ −22 dBFS peaks at the music bus, measured */, PRE = 0.5, TRIM = 0.8 /* menu peaks ≈ −12 dBFS at the music bus, clipper knee only on act III hits */, DUCK = 0.355 /* −9 dB */;
 const SEED = 0x4b445a;
 const smooth = t => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); };
 
@@ -135,74 +135,234 @@ function pluck(tr, t, f, vel, ratio, index, decay, send) {
 }
 const walk = (i, n, r) => { const d = r < 0.5 ? -1 - Math.floor(r * 4) : 1 + Math.floor((r - 0.5) * 4); let j = i + d; if (j < 0) j = -j; if (j >= n) j = 2 * n - 2 - j; return j === i ? (i + 1) % n : j; };
 
-/* ── menu: 16th-note sequencer at 133.33 BPM ── */
-const PAD_CHORDS = [[174.61, 220, 329.63], [174.61, 233.08, 293.66], [174.61, 261.63, 329.63], [164.81, 196, 261.63]]; // Dm9 · Bbmaj7 · Fmaj7 · Cadd9 over the D pedal
-const BELL_SCALE = [293.66, 349.23, 392, 440, 523.25, 587.33, 698.46, 783.99, 880]; // D minor pentatonic D4–A5
-const TICK_VEL = [1, 0.3, 0.6, 0.3];
+/* ── menu: groove phase-locked to the KDZ sheet ──
+   The sheet is a 20 s cycle whose explicit beats (act III) are 0.45 s apart, so the 16th grid is anchored there:
+   beat b ↔ u = act3 + 0.45·b for b ∈ [−21, 22]; the cycle's remaining 0.2 s is absorbed by the impact at `lead`.
+   Cues off the grid (slab, zoom, panels, wipe) get one-shot accents at their exact time. Eight cycles form the macro
+   loop (chord, bass root, density and patterns change per cycle), so the piece only repeats every 160 s. */
+const CYC = 20;
+const SHEET = { construct1: 1.25, spec1: 1.9, act2: 3.2, detailIn: 4.35, detailOut: 5.5, dBand: 5.85, zDraw: 7.0, triptych: 8.2, panelStagger: 0.07, triptychOut: 9.38, act3: 9.8, act4: 15.2, titleBlock: 15.9, values: 16.0, notes: 16.1, breathe: 16.65, breathPeriod: 2.4, exit: 19.1, lead: 19.7 };
+const NAMED = { push1: 2, giantD: 3, pull1: 4, tiny: 5, push2: 6, giantK: 7, pull2: 8, hit: 9, converge: 11 };
+const ROOTS = [73.42, 73.42, 58.27, 87.31, 65.41, 58.27, 98, 55];   // bass root per cycle: D · D · B♭ · F · C · B♭ · G · A
+const CHORDS = [[174.61, 220, 329.63], [174.61, 220, 261.63], [174.61, 233.08, 293.66], [174.61, 261.63, 329.63], [164.81, 196, 261.63], [174.61, 233.08, 349.23], [174.61, 220, 293.66], [164.81, 196, 293.66]];   // Dm9 · Dm7 · B♭maj7 · Fmaj7 · Cadd9 · B♭maj7 · Gm9 · A7sus
+const SCALE = [293.66, 349.23, 392, 440, 523.25, 587.33, 698.46, 783.99, 880];   // D minor pentatonic D4–A5
+const BASS_PAT = [[1, 0, 0, 2, 0, 0, 1, 0, 1, 0, 0, 2, 0, 3, 0, 0], [1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 3, 0, 2, 0], [1, 0, 0, 1, 0, 2, 0, 1, 0, 0, 1, 0, 2, 0, 3, 2], [1, 1, 0, 2, 1, 0, 0, 1, 1, 1, 0, 2, 1, 0, 3, 0]];
+const BASS_DRIVE = [1, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1, 1, 3, 3, 2, 2], BASS_INTRO = [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
+const HAT_VEL = [1, 0.35, 0.65, 0.35], ARP_DENS = [0.22, 0.3, 0.38, 0.45, 0.25, 0.42, 0.5, 0.55];
+const subOf = c => ROOTS[c] / 2 < 32 ? ROOTS[c] : ROOTS[c] / 2;
 function makeMenu(e) {
-  const ctx = e.ctx, tr = makeTrack(e, MENU_LEVEL), t0 = ctx.currentTime + 0.12;
-  const H = (a, b) => LD.U.hash2(a, b, SEED);
-  const subLP = filt(tr, 'lowpass', 150, 1.1, tr.gain), subEnv = gainNode(tr, 0, subLP);
-  tone(tr, 'sine', 36.71, 0, 0.5, subEnv); tone(tr, 'triangle', 73.42, 3, 0.16, subEnv);
-  subEnv.gain.setValueAtTime(0, t0); subEnv.gain.linearRampToValueAtTime(1, t0 + 1.5);
-  const opening = t => { const b = (t - t0) / BAR, m = b - 32 * Math.floor(b / 32); return m >= 30 ? smooth((m - 30) / 2) : b >= 32 && m < 1 ? 1 - smooth(m) : 0; };   // 0→1 over bars 30–31, back over bar 32
-  autom(tr, subLP.frequency, t => 130 + 80 * Math.sin(TAU * 0.05 * (t - t0)) + 220 * opening(t), BAR / 4);
+  const ctx = e.ctx, tr = makeTrack(e, MENU_LEVEL), H = (a, b) => LD.U.hash2(a, b, SEED), N = noiseBuf(e);
+  const K = LD.Main && LD.Main.kdz, S = Object.assign({}, SHEET, K && K.cues), NB = Object.assign({}, NAMED, K && K.beats);
+  const beat = K && K.beat > 0 ? K.beat : BEAT, step = beat / 4;
 
-  const padLP = filt(tr, 'lowpass', 1000, 0.9, tr.gain), padEnv = gainNode(tr, 0, padLP);
-  const pad = [tone(tr, 'triangle', PAD_CHORDS[0][0], -6, 0.34, padEnv), tone(tr, 'sawtooth', PAD_CHORDS[0][1], 4, 0.2, padEnv), tone(tr, 'sawtooth', PAD_CHORDS[0][2], 9, 0.17, padEnv)];
-  autom(tr, padLP.frequency, t => 1000 + 400 * Math.sin(TAU * 0.03 * (t - t0)) + 1600 * opening(t), BAR / 4);
+  /* graph: groove → sweepable low-pass → track; bass, sub and pad are ducked by every kick */
+  const busLP = filt(tr, 'lowpass', 5500, 0.6, tr.gain), bus = gainNode(tr, 1, busLP), pumpG = gainNode(tr, 1, bus);
+  const kickOut = gainNode(tr, 1, null), kDrive = node(tr, ctx.createWaveShaper()); kDrive.curve = driveCurve(1.7); kickOut.connect(kDrive); kDrive.connect(bus);
+  const hatOut = filt(tr, 'highpass', 5200, 0.7, bus);
+  const HAT_IN = [[-0.16, 7400], [0.22, 8600], [-0.3, 6800], [0.12, 7900]].map(([pan, f]) => { const bp = filt(tr, 'bandpass', f, 1.1, null); bp.connect(panner(tr, pan, hatOut)); return bp; });
+  const clapOut = filt(tr, 'highpass', 700, 0.7, bus), arpOut = gainNode(tr, 1, bus);
+  const subG = gainNode(tr, 0, pumpG), sub = tone(tr, 'sine', subOf(0), 0, 0.42, subG);
+  subG.gain.linearRampToValueAtTime(1, ctx.currentTime + 1.5);
+  const padLP = filt(tr, 'lowpass', 1100, 0.8, pumpG), padEnv = gainNode(tr, 0, padLP);
+  const pad = [tone(tr, 'sawtooth', CHORDS[0][0], -7, 0.12, padEnv), tone(tr, 'sawtooth', CHORDS[0][1], 5, 0.1, padEnv), tone(tr, 'triangle', CHORDS[0][2], 0, 0.15, padEnv)];
+  const setChord = (t, c) => CHORDS[c].forEach((f, i) => pad[i].o.frequency.setTargetAtTime(f, t, 0.03));
+  const hold = (p, t, v) => { if (p.cancelAndHoldAtTime) p.cancelAndHoldAtTime(t); else { p.cancelScheduledValues(t); p.setValueAtTime(v, t); } };
 
-  const kickLP = filt(tr, 'lowpass', 260, 0.7, tr.gain);
-  const tickIn = [[-0.12, 3000], [0.22, 3250], [-0.24, 2850], [0.14, 3100]].map(([pan, f]) => { const bp = filt(tr, 'bandpass', f, 6, null); bp.connect(panner(tr, pan, tr.gain)); return bp; });
-  const bellSend = gainNode(tr, 0.6, tr.wet);
-
-  const kick = (t, acc) => {
+  /* voices */
+  const burst = (t, dest, o) => {
+    const s = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), g = ctx.createGain(), a = o.a || 0.002;
+    s.buffer = N; bp.type = o.type || 'bandpass'; bp.Q.value = o.q || 1; bp.frequency.setValueAtTime(o.f, t); if (o.f2) bp.frequency.exponentialRampToValueAtTime(o.f2, t + a + o.d);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(o.peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + o.d);
+    s.connect(bp); bp.connect(g); g.connect(dest);
+    s.start(t, Math.random() * 1.2, a + o.d + 0.05); src(tr, s, t + a + o.d + 0.06);
+  };
+  const duck = t => { const g = pumpG.gain; g.cancelScheduledValues(t); g.setValueAtTime(1, t); g.linearRampToValueAtTime(0.3, t + 0.012); g.linearRampToValueAtTime(1, t + 0.24); };
+  const kick = (t, v) => {
     const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.035);
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.3 * acc, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
-    o.connect(g); g.connect(kickLP); o.start(t); src(tr, o, t + 0.12);
+    o.type = 'sine'; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.045);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.9 * v, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g); g.connect(kickOut); o.start(t); src(tr, o, t + 0.22);
+    burst(t, kickOut, { type: 'highpass', f: 1800, q: 0.7, peak: 0.22 * v, d: 0.012 });
+    duck(t);
   };
-  const tick = (t, v, chain) => {
+  const hat = (t, v, open, chain) => {
     const s = ctx.createBufferSource(), g = ctx.createGain();
-    s.buffer = noiseBuf(e);
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.28 * v, t + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
-    s.connect(g); g.connect(tickIn[chain]);
-    s.start(t, Math.random() * 1.5, 0.04); src(tr, s, t + 0.05);
+    s.buffer = N; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.42 * v, t + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, t + (open ? 0.1 : 0.028));
+    s.connect(g); g.connect(HAT_IN[chain & 3]); s.start(t, Math.random() * 1.2, open ? 0.12 : 0.04); src(tr, s, t + 0.13);
   };
-  const bell = (t, f, vel) => {
-    const car = ctx.createOscillator(), mod = ctx.createOscillator(), mg = ctx.createGain(), g = ctx.createGain();
-    car.type = 'sine'; mod.type = 'sine'; car.frequency.value = f; mod.frequency.value = f * 3.53;
-    mg.gain.setValueAtTime(f * 1.2, t); mg.gain.exponentialRampToValueAtTime(f * 0.03, t + 0.25);
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vel, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
-    mod.connect(mg); mg.connect(car.frequency); car.connect(g); g.connect(tr.gain); g.connect(bellSend);
-    mod.start(t); car.start(t); src(tr, mod, t + 0.85); src(tr, car, t + 0.85);
+  const clap = (t, v) => { for (let i = 0; i < 3; i++) burst(t + i * 0.011, clapOut, { f: 1500, q: 1.1, peak: 0.45 * v * (i === 2 ? 1 : 0.6), d: i === 2 ? 0.15 : 0.02 }); burst(t + 0.02, tr.wet, { f: 1700, q: 0.8, peak: 0.28 * v, d: 0.22 }); };
+  const rim = (t, v, f) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.6, t + 0.02);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.32 * v, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+    o.connect(g); g.connect(bus); o.start(t); src(tr, o, t + 0.05);
+    burst(t, bus, { f: 3400, q: 2, peak: 0.16 * v, d: 0.01 });
   };
+  const bassNote = (t, f, v, len) => {
+    const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g2 = ctx.createGain(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+    o.type = 'sawtooth'; o2.type = 'square'; o.frequency.value = f; o2.frequency.value = f; o2.detune.value = -1200; g2.gain.value = 0.45;
+    lp.type = 'lowpass'; lp.Q.value = 5; lp.frequency.setValueAtTime(140 + 1100 * v, t); lp.frequency.exponentialRampToValueAtTime(120, t + len);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.38 * v, t + 0.004); g.gain.setValueAtTime(0.38 * v, t + len - 0.03); g.gain.linearRampToValueAtTime(0.0001, t + len);
+    o.connect(lp); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(pumpG);
+    o.start(t); o2.start(t); src(tr, o, t + len + 0.02); src(tr, o2, t + len + 0.02);
+  };
+  const plk = (t, f, v, pan) => {
+    const car = ctx.createOscillator(), mod = ctx.createOscillator(), mg = ctx.createGain(), g = ctx.createGain(), p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(), s = ctx.createGain();
+    car.type = 'sine'; mod.type = 'sine'; car.frequency.value = f; mod.frequency.value = f * 2;
+    mg.gain.setValueAtTime(f * 1.5, t); mg.gain.exponentialRampToValueAtTime(f * 0.04, t + 0.14);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.2 * v, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    if (p.pan) p.pan.value = pan;
+    mod.connect(mg); mg.connect(car.frequency); car.connect(g); g.connect(p); p.connect(arpOut); s.gain.value = 0.4; g.connect(s); s.connect(tr.wet);
+    mod.start(t); car.start(t); src(tr, mod, t + 0.45); src(tr, car, t + 0.45);
+  };
+  const stab = (t, ch, v, dur) => {
+    const lp = ctx.createBiquadFilter(), g = ctx.createGain(), s = ctx.createGain();
+    lp.type = 'lowpass'; lp.Q.value = 2; lp.frequency.setValueAtTime(3800, t); lp.frequency.exponentialRampToValueAtTime(320, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.15 * v, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    for (const f of ch) for (const det of [-9, 8]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f * 2; o.detune.value = det; o.connect(lp); o.start(t); src(tr, o, t + dur + 0.05); }
+    lp.connect(g); g.connect(bus); s.gain.value = 0.35; g.connect(s); s.connect(tr.wet);
+  };
+  const boom = (t, v) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(34, t + 0.35);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.9 * v, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    o.connect(g); g.connect(kickOut); o.start(t); src(tr, o, t + 0.95); duck(t);
+  };
+  const crash = (t, v) => { burst(t, bus, { type: 'lowpass', f: 9000, f2: 500, q: 0.5, peak: 0.5 * v, a: 0.004, d: 0.7 }); burst(t, tr.wet, { f: 3000, q: 0.6, peak: 0.35 * v, a: 0.004, d: 0.5 }); };
+  const push = (t, v) => {
+    burst(t, bus, { f: 1900, q: 0.9, peak: 0.5 * v, d: 0.12 });
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle'; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(120, t + 0.05);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.35 * v, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    o.connect(g); g.connect(bus); o.start(t); src(tr, o, t + 0.12);
+  };
+  const pull = (t, d) => burst(t, bus, { f: 900, f2: 4200, q: 1.2, peak: 0.4, a: d * 0.92, d: 0.03 });
+  const riser = (t, d, v) => { burst(t, bus, { f: 600, f2: 7000, q: 0.9, peak: 0.45 * v, a: d * 0.95, d: 0.03 }); burst(t, tr.wet, { f: 800, f2: 5000, q: 0.9, peak: 0.25 * v, a: d * 0.95, d: 0.03 }); };
+  const whoosh = (t, f0, f1, d, v) => burst(t, bus, { f: f0, f2: f1, q: 1.4, peak: 0.28 * v, a: d * 0.45, d: d * 0.55 });
+  const pop = (t, i) => {
+    const o = ctx.createOscillator(), g = ctx.createGain(), f = [740, 880, 1046][i] || 800;
+    o.type = 'square'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.5, t + 0.05);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.1, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    o.connect(g); g.connect(bus); o.start(t); src(tr, o, t + 0.07);
+    burst(t, bus, { type: 'highpass', f: 2500, q: 0.7, peak: 0.2, d: 0.015 });
+  };
+  const pencil = (t, i) => rim(t, 0.45, [2600, 3100, 2200][i] || 2600);
 
-  const seq = { step: 0, next: t0, nextPhrase: 3, bellIdx: 3, phrase: null };
-  const doubleTime = bar => bar % 32 >= 30;
-  const muted = bar => bar >= 4 && !doubleTime(bar) && H(bar >> 1, 11) < 0.15;   // breathing: 2 silent bars now and then
-  const onBar = (bar, t) => {
-    if (bar % 8 === 0) { const ch = PAD_CHORDS[(bar >> 3) & 3]; pad.forEach((v, i) => v.o.frequency.setValueAtTime(ch[i], t)); padEnv.gain.setValueAtTime(0, t); padEnv.gain.linearRampToValueAtTime(1, t + 2); }
-    if (bar % 8 === 6) { const rel = bar % 32 === 30 ? 1 : 3, r = t + 2 * BAR - rel; padEnv.gain.setValueAtTime(1, r); padEnv.gain.linearRampToValueAtTime(0, r + rel); }   // pad holds through the 32-bar transition
-    if (bar === seq.nextPhrase) {
-      const n = 1 + Math.floor(H(bar, 5) * 3), offs = [2, 6, 10, 14], notes = [];
-      let p = Math.floor(H(bar, 6) * 4);
-      for (let i = 0; i < n; i++) { seq.bellIdx = walk(seq.bellIdx, BELL_SCALE.length, H(bar, 20 + i)); notes.push({ pos: offs[p % 4] + (H(bar, 30 + i) < 0.25 ? 1 : 0), f: BELL_SCALE[seq.bellIdx], vel: 0.11 * (0.55 + 0.45 * H(bar, 40 + i)) }); p += 1 + (H(bar, 50 + i) < 0.4 ? 1 : 0); }
-      seq.phrase = { bar, notes };
-      seq.nextPhrase = bar + 2 + Math.floor(H(bar, 9) * 3);
+  /* per-cycle arpeggio phrases (act II and act IV), deterministic per macro index */
+  const ARP = [];
+  for (let c = 0; c < 8; c++) {
+    const dens = ARP_DENS[c], mk = (salt, oct) => { let ni = 2 + c % 3; const out = []; for (let i = 0; i < 16; i++) { ni = walk(ni, SCALE.length, H(c, salt + i)); const on = H(c, salt + 16 + i) < dens * ((i & 1) ? 0.55 : 1); out.push(on ? { f: SCALE[ni] * (oct && H(c, salt + 32 + i) < 0.3 ? 2 : 1), v: 0.35 + 0.65 * H(c, salt + 48 + i), pan: (H(c, salt + 64 + i) - 0.5) * 0.9 } : null); } return out; };
+    ARP.push([mk(0, false), mk(100, true)]);
+  }
+
+  /* sheet events */
+  const impact = (t, c) => {
+    boom(t, 1); crash(t, 0.8);
+    subG.gain.cancelScheduledValues(t); subG.gain.setValueAtTime(0.45, t); subG.gain.linearRampToValueAtTime(1, t + S.act2 + CYC - S.lead);
+    busLP.frequency.cancelScheduledValues(t); busLP.frequency.setValueAtTime(650, t); busLP.frequency.exponentialRampToValueAtTime(5500, t + S.act2 + CYC - S.lead);
+    setChord(t, c); sub.o.frequency.setTargetAtTime(subOf(c), t, 0.06);
+    hold(padEnv.gain, t, 0); padEnv.gain.setValueAtTime(0, t); padEnv.gain.linearRampToValueAtTime(0.35, t + 1.5);
+    padLP.frequency.cancelScheduledValues(t); padLP.frequency.setValueAtTime(900, t);
+  };
+  const slab = t => { subG.gain.cancelScheduledValues(t); subG.gain.setValueAtTime(1, t); boom(t, 0.75); burst(t, bus, { type: 'lowpass', f: 1200, f2: 150, q: 0.8, peak: 0.45, a: 0.003, d: 0.25 }); busLP.frequency.cancelScheduledValues(t); busLP.frequency.setValueAtTime(5500, t); };
+  const act4 = (t, c) => {
+    boom(t, 0.55); stab(t, CHORDS[c], 0.9, 1.4);
+    hold(padEnv.gain, t, 0.35); padEnv.gain.linearRampToValueAtTime(1, t + 1.2);
+    padLP.frequency.setValueAtTime(900, t); padLP.frequency.exponentialRampToValueAtTime(2200, t + 1.2);
+  };
+  const breathe = t => { const P = S.breathPeriod, g = padEnv.gain; hold(g, t, 1); for (let i = 0; i < 2; i++) { g.setValueAtTime(1, t + i * P); g.linearRampToValueAtTime(0.5, t + i * P + P / 2); g.linearRampToValueAtTime(1, t + (i + 1) * P); } };
+  const wipe = t => {
+    const d = S.lead - S.exit; riser(t, d, 0.7);
+    busLP.frequency.cancelScheduledValues(t); busLP.frequency.setValueAtTime(5500, t); busLP.frequency.exponentialRampToValueAtTime(700, t + d);
+    hold(padEnv.gain, t, 0.8); padEnv.gain.linearRampToValueAtTime(0, t + d * 0.9);
+  };
+  const named = (t, b, c) => {
+    if (b === NB.push1 || b === NB.push2) push(t, 0.8);
+    else if (b === NB.giantD || b === NB.giantK) { boom(t, 0.7); stab(t, CHORDS[c], 0.7, 0.35); }
+    else if (b === NB.pull1 || b === NB.pull2) pull(t, beat);
+    else if (b === NB.tiny) { rim(t, 0.8, 3200); plk(t, SCALE[8], 0.7, 0.3); }
+    else if (b === NB.hit) { clap(t, 1); crash(t, 0.6); stab(t, CHORDS[c], 0.8, 0.5); }
+    else if (b === NB.converge) riser(t, beat, 0.5);
+  };
+  const stepEvent = (t, k, c) => {
+    if (k === 88) return impact(t, (c + 1) & 7);   // `lead`: the next cycle starts here
+    const b = Math.floor(k / 4), subd = k - 4 * b, q = ((b % 4) + 4) % 4, u = S.act3 + k * step, idx = q * 4 + subd;
+    const act = u < S.act2 ? 1 : u < S.act3 ? 2 : u < S.act4 ? 3 : u < S.exit ? 4 : 5;
+    const brk = c === 4 && act < 3, rise = act === 1 ? Math.max(0, (u - 0.35) / (S.act2 - 0.35)) : 1;
+    if (subd === 0 && act !== 5 && !brk && (act !== 1 || b >= -20)) kick(t, act === 1 ? 0.55 + 0.45 * rise : act === 3 ? 1 : 0.9);
+    if (act !== 5 && !(brk && (subd & 1))) hat(t, HAT_VEL[subd] * (act === 1 ? 0.45 + 0.55 * rise : 1) * (brk ? 0.6 : 1), act > 1 && c >= 2 && subd === 2, k);
+    if (c >= 2 && b === -1 && act === 2) hat(t + step / 2, 0.5 * HAT_VEL[subd], false, k + 2);
+    if (subd === 0 && q === 2 && (act === 2 || act === 4) && c >= 1 && !brk) clap(t, 0.8);
+    if (c >= 5 && subd === 3 && (q & 1) && (act === 2 || act === 4)) rim(t, 0.5, 1700);
+    const pat = act === 1 ? BASS_INTRO : act === 3 ? BASS_DRIVE : BASS_PAT[c & 3], bn = act === 5 ? 0 : pat[idx];
+    if (bn) bassNote(t, ROOTS[c] * (bn === 2 ? 2 : bn === 3 ? 1.5 : 1), (subd === 0 ? 1 : 0.7) * (act === 1 ? 0.5 + 0.5 * rise : 1), bn === 1 && subd === 0 ? step * 1.6 : step * 0.9);
+    if ((act === 2 || act === 4) && !brk) {
+      const n = ARP[c][act === 4 ? 1 : 0][idx]; if (n) plk(t, n.f, n.v, n.pan);
+      if ((c === 3 || c === 7) && (subd & 1) === 0) { const m = ARP[c][1][(idx + 5) & 15]; if (m) plk(t + step / 2, m.f * 0.5, m.v * 0.6, -m.pan); }
+    }
+    if (act === 3 && subd === 0) named(t, b, c);
+    if (k === 48) act4(t, c);
+  };
+  const fire = (ev, t, ecyc) => {
+    const c = ecyc & 7;
+    if (M._trace && M._trace.length < 2000) M._trace.push({ u: +ev.u.toFixed(4), k: ev.k, kind: ev.kind, c, at: +t.toFixed(4) });
+    switch (ev.kind) {
+      case 'step': return stepEvent(t, ev.k, c);
+      case 'slab': return slab(t);
+      case 'zoomIn': return whoosh(t, 350, 3800, 0.7, 1);
+      case 'zoomOut': return whoosh(t, 3800, 350, 0.6, 0.8);
+      case 'band': boom(t, 0.4); return rim(t, 0.6, 2400);
+      case 'pencil': return pencil(t, ev.arg);
+      case 'pop': return pop(t, ev.arg);
+      case 'riser': return (c & 1) ? riser(t, ev.arg, 0.7) : pull(t, ev.arg);
+      case 'breathe': return breathe(t);
+      case 'wipe': return wipe(t);
     }
   };
-  const schedStep = (s, t) => {
-    const pos = s & 15, bar = s >> 4, beat = pos >> 2, sub = pos & 3;
-    if (pos === 0) onBar(bar, t);
-    if (sub === 0 && !tr.quiet) kick(t, beat === 0 ? 1 : 0.8);
-    if (!muted(bar)) { tick(t, TICK_VEL[sub], sub); if (doubleTime(bar)) tick(t + STEP / 2, TICK_VEL[sub] * 0.45, (sub + 2) & 3); }
-    if (!tr.quiet && seq.phrase && seq.phrase.bar === bar) for (const nt of seq.phrase.notes) if (nt.pos === pos) bell(t, nt.f, nt.vel);
+  const EV = [];
+  for (let k = -84; k <= 88; k++) EV.push({ u: S.act3 + k * step, k, kind: 'step' });
+  const cue = (u, kind, arg) => { if (u >= 0 && u < CYC) EV.push({ u, k: null, kind, arg }); };
+  cue(S.construct1, 'pencil', 0); cue(S.spec1, 'pencil', 1); cue(S.act2, 'slab'); cue(S.detailIn, 'zoomIn'); cue(S.detailOut, 'zoomOut'); cue(S.dBand, 'band'); cue(S.zDraw, 'pencil', 2);
+  for (let i = 0; i < 3; i++) cue(S.triptych + i * S.panelStagger, 'pop', i);
+  cue(S.triptychOut, 'riser', S.act3 - S.triptychOut); cue(S.titleBlock, 'pencil', 0); cue(S.values, 'pencil', 1); cue(S.notes, 'pencil', 2); cue(S.breathe, 'breathe'); cue(S.exit, 'wipe');
+  EV.sort((a, b) => a.u - b.u || (a.k === null) - (b.k === null));
+
+  /* clock: follow the sheet while it runs; an internal clock takes over from the last known position when it stalls (hidden tab, reduced motion, no WebGL) */
+  const seq = { m: null, cyc: 0, lastPos: null, lastU: null, uInt: 0, stall: 0, aLast: 0, ei: 0, ecyc: 0, ring: [], rate: 1 };
+  const sheetTime = now => {
+    let u = null;
+    if (K && typeof K.rawTime === 'function') { try { if (K.running()) { u = +K.rawTime(); if (!(u >= 0 && u < CYC)) u = null; } } catch (_) { u = null; } }
+    const dt = seq.aLast ? Math.min(2, now - seq.aLast) : 0; seq.aLast = now;
+    if (u !== null && u !== seq.lastU) { seq.lastU = u; seq.uInt = u; seq.stall = 0; return u; }
+    seq.stall += dt;
+    if (u !== null && seq.stall < 0.4) return u;
+    seq.uInt = (seq.uInt + dt) % CYC;
+    return seq.uInt;
   };
   tr.tick = (now, horizon) => {
-    if (seq.next < now - 0.25) { const k = Math.ceil((now + 0.05 - seq.next) / STEP); seq.step += k; seq.next += k * STEP; }
-    while (seq.next < horizon) { schedStep(seq.step, seq.next); seq.step++; seq.next += STEP; }
+    if (tr.quiet) return;
+    const u = sheetTime(now);
+    if (seq.lastPos !== null && u < seq.lastPos - CYC / 2) seq.cyc++;
+    seq.lastPos = u;
+    const mNow = seq.cyc * CYC + u, mEnd = mNow + (horizon - now);
+    const R = seq.ring; R.push([now, mNow]); while (R.length > 2 && now - R[0][0] > 1) R.shift();
+    if (seq.stall >= 0.4 || now - R[0][0] < 0.3) seq.rate = 1;
+    else { const r = (mNow - R[0][1]) / (now - R[0][0]); seq.rate = r > 0.25 && r < 2 ? r : 1; }
+    if (seq.m === null || seq.m < mNow - 0.3 || seq.m > mNow + 1) {
+      seq.m = mNow; seq.ecyc = seq.cyc; seq.ei = 0;
+      while (seq.ei < EV.length && EV[seq.ei].u < u) seq.ei++;
+      if (seq.ei >= EV.length) { seq.ei = 0; seq.ecyc++; }
+      setChord(now, seq.ecyc & 7); sub.o.frequency.setTargetAtTime(subOf(seq.ecyc & 7), now, 0.05);
+    }
+    for (;;) {
+      const ev = EV[seq.ei], me = seq.ecyc * CYC + ev.u;
+      if (me >= mEnd) break;
+      if (me >= seq.m && me >= mNow - 0.15) fire(ev, Math.max(now + 0.004, now + (me - mNow) / seq.rate), seq.ecyc);
+      if (++seq.ei >= EV.length) { seq.ei = 0; seq.ecyc++; }
+    }
+    seq.m = mEnd;
   };
+  M._seq = () => ({ m: seq.m, cyc: seq.cyc, u: seq.lastPos, stall: seq.stall, rate: +seq.rate.toFixed(3), source: seq.stall >= 0.4 ? 'internal' : 'kdz' });
   return tr;
 }
 
@@ -361,7 +521,7 @@ const M = LD.Music = {
       p.linearRampToValueAtTime(DUCK, now + 0.12); p.setValueAtTime(DUCK, until); p.linearRampToValueAtTime(1, until + 2);
     } catch (err) { warnOnce('duck', err); }
   },
-  _pump: safePump,
+  _pump: safePump, _trace: null, _seq: null, _env: () => env,
   // diagnostics (tools/*.mjs): duck gain and live tracks
   _state() { return { duck: env ? +env.duck.gain.value.toFixed(3) : null, tracks: live.map(tr => ({ level: tr.level, gain: +tr.gain.gain.value.toFixed(3), fading: tr.fading, nodes: tr.nodes.length, sources: tr.sources.size })) }; }
 };
