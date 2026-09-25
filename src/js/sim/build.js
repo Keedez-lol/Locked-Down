@@ -470,7 +470,7 @@ function isLinked(inst) {
 function bayTick(inst, d, dt) {
   if (inst.paused) { inst._wantPower = 0; return; }
   if (inst._mt === undefined) { hidden(inst, '_mt', (U.hashStr(inst.uid) % 100) / 10); hidden(inst, '_mtBusy', 0); }
-  inst._wantPower = d.power && d.power.use > 0 ? d.power.use * Math.pow(2, inst.oc | 0) : 0;   // demand in W (Economy's convention for Power)
+  inst._wantPower = d.power && d.power.use > 0 ? d.power.use : 0;
   if (!isLinked(inst)) { inst.state = 'no_link'; inst.reason = 'Sin enlace con el almacén'; return; }
   const ratio = powerRatio(inst, d);
   if (ratio <= 0) { inst.state = 'no_power'; inst.reason = 'Sin energía'; return; }
