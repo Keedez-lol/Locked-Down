@@ -19,7 +19,7 @@ const Main = LD.Main = {
     LD.Render.init($('world'), $('fx'));
     Main.bindGlobalInput();
     E.on('toast', p => LD.UI.toast(p.text, p.kind));
-    E.on('settings:changed', s => { LD.Audio.setVolumes({ master: s.volMaster, music: s.volMusic, sfx: s.volSfx, ambient: s.volAmbient }); if (Main.kdz) Main.kdz.setReducedMotion(!!s.reducedMotion); LD.Tex.quality = s.texture; });
+    E.on('settings:changed', s => { LD.Audio.setVolumes({ master: s.volMaster, music: s.volMusic, sfx: s.volSfx, ambient: s.volAmbient }); if (Main.kdz) Main.kdz.setReducedMotion(!!s.reducedMotion); LD.Tex.quality = s.texture; if (LD.Render.showRanges) LD.Render.showRanges(!!s.ranges); if (LD.Particles && LD.Particles.setQuality) LD.Particles.setQuality(s.particles); });
     const s = LD.Settings.get();
     LD.Audio.setVolumes({ master: s.volMaster, music: s.volMusic, sfx: s.volSfx, ambient: s.volAmbient });
     $('boot').hidden = true;
