@@ -1,0 +1,13 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1600, height: 900 } });
+const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+await p.goto('file://' + process.cwd() + '/dist/index.html');
+await p.waitForFunction(() => window.LD && LD.Main && LD.Main.ready, null, { timeout: 60000 });
+await p.waitForTimeout(3200);
+await p.evaluate(() => LD.Main.kdz.seek(16.5)); await p.waitForTimeout(500);
+await p.screenshot({ path: 'tools/out/30_menu_square.png' });
+await p.evaluate(() => LD.Main.kdz.seek(13.9)); await p.waitForTimeout(500);
+await p.screenshot({ path: 'tools/out/31_menu_square_hit.png' });
+console.log(errs);
+await b.close();

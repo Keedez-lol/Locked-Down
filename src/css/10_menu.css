@@ -1,7 +1,7 @@
 /* main menu: ink slab on the left of the KDZ paper (decisions 3, 4, 5) */
 #menu-root{position:absolute;inset:0;pointer-events:none}
 #menu-root[hidden]{display:none}
-.menu-slab{position:absolute;left:0;top:0;bottom:0;width:36%;display:flex;flex-direction:column;padding:2.5rem 3rem 2.25rem;background:var(--ink);border-right:1px solid var(--line2);color:var(--bone);pointer-events:auto}
+.menu-slab{position:absolute;left:0;top:0;bottom:0;width:43.75%;display:flex;flex-direction:column;padding:2.5rem 3rem 2.25rem;background:var(--ink);border-right:1px solid var(--line2);color:var(--bone);pointer-events:auto}
 .menu-eyebrow{display:flex;flex-wrap:wrap;gap:0 .5rem;padding-bottom:.8rem;border-bottom:1px solid var(--line);font:500 .5625rem/1.6 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--bone3)}
 .menu-eyebrow-k{color:var(--bone)}
 .menu-lockup{display:block;width:100%;height:6rem;margin-top:2.75rem}
