@@ -1,0 +1,12 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1600, height: 900 } });
+await p.goto('file://' + process.cwd() + '/dist/index.html');
+await p.waitForFunction(() => window.LD && LD.Main && LD.Main.ready, null, { timeout: 60000 });
+const r = await p.evaluate(() => { const out = []; for (const ss of document.styleSheets) { try { for (const r of ss.cssRules) { const t = r.cssText || ''; if (t.indexOf('side-panel') >= 0 || (r.selectorText && r.selectorText.indexOf('side-panel') >= 0)) out.push((r.selectorText || r.conditionText || '?') + ' :: ' + t.slice(0, 160)); } } catch (e) { out.push('err ' + e.message); } } return out; });
+console.log(r.join('\n'));
+await p.evaluate(() => { LD.Settings.set({ tutorial: false }); LD.Main.startNewGame({ name: 'P', difficulty: 'normal', seed: 11 }); });
+await p.waitForTimeout(400);
+const r2 = await p.evaluate(() => { const hub = Object.values(LD.G.structures).find(s => s.id === 'hub'); LD.UI.Panel.select(hub.uid); return new Promise(res => setTimeout(() => { const el = document.querySelector('.side-panel'); const m = el.matches('.side-panel.open'); const t1 = getComputedStyle(el).transform; el.style.transition = 'none'; const t2 = getComputedStyle(el).transform; res({ m, t1, t2, dur: getComputedStyle(el).transitionDuration }); }, 800)); });
+console.log(JSON.stringify(r2));
+await b.close();

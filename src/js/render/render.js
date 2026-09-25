@@ -599,11 +599,12 @@ function weather(L, v, dt, t) {
     fogDrift = (fogDrift + dt * 7) % 768; fogDrift2 = (fogDrift2 - dt * 4 + 768) % 768;
     wc.save();
     wc.globalAlpha = 0.20;
-    wc.setTransform(kScale * 3, 0, 0, kScale * 3, kScale * (fogDrift - 768 - v.ox * 0.15), kScale * (-v.oy * 0.15 - 200));
-    wc.fillStyle = fogPat; wc.fillRect(-256, -256, 1280, 900);
+    const s1 = 3 * v.z, s2 = 2.1 * v.z;
+    wc.setTransform(kScale * s1, 0, 0, kScale * s1, kScale * (v.ox + (fogDrift - 768) * v.z), kScale * (v.oy - 200 * v.z));
+    wc.fillStyle = fogPat; wc.fillRect(-v.ox / s1 - 800, -v.oy / s1 - 800, SW / s1 + 1600, SH / s1 + 1600);
     wc.globalAlpha = 0.14;
-    wc.setTransform(kScale * 2.1, 0, 0, kScale * 2.1, kScale * (fogDrift2 - 768 - v.ox * 0.25), kScale * (-v.oy * 0.25 - 300));
-    wc.fillRect(-256, -256, 1600, 1100);
+    wc.setTransform(kScale * s2, 0, 0, kScale * s2, kScale * (v.ox + (fogDrift2 - 768) * v.z), kScale * (v.oy - 300 * v.z));
+    wc.fillRect(-v.ox / s2 - 800, -v.oy / s2 - 800, SW / s2 + 1600, SH / s2 + 1600);
     wc.restore();
     wc.setTransform(kScale, 0, 0, kScale, 0, 0);
     wc.fillStyle = 'rgba(190,188,182,0.06)'; wc.fillRect(0, 0, SW, SH);
@@ -803,6 +804,7 @@ function drawFlashes(L, v, t) {
   fc.globalAlpha = 1; fc.lineWidth = 1;
 }
 function drawHint() {
+  if (LD.UI && LD.UI.Build && typeof LD.UI.Build.setMode === 'function') return;
   const h = MODE_HINTS[R.mode]; if (!h) return;
   labelBox(HW, SH - R.hintOffset, h, 'center');
 }

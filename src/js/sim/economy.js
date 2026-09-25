@@ -287,9 +287,15 @@ function setRecipe(uid, id) {
   if (inst.recipe === id) return true;
   const r = rtOf(uid), old = inst.recipe && R().recipe(inst.recipe);
   if (old && inst.loaded && inst.progress < old.time) addMany(inst.layer, old.in);
-  inst.recipe = id; inst.progress = 0; inst.loaded = false; r.fin = null; r.fout = null;
+  inst.recipe = id; inst.progress = 0; inst.loaded = false; r.fin = null; r.fout = null; inst.jobs = null;
   if (id) { G.discovered.recipes[id] = true; for (const o in R().recipe(id).out) discover(o); }
   setState(inst, 'idle', null);
+  return true;
+}
+function setJobs(uid, n) {
+  const inst = G && G.structures[uid]; if (!inst) return false;
+  inst.jobs = (n === null || n === undefined || !isFinite(n)) ? null : Math.max(0, n | 0);
+  if (inst.jobs !== 0 && inst.state === 'idle') setState(inst, 'idle', null);
   return true;
 }
 function applyRecipeToAll(uid) {
@@ -347,6 +353,7 @@ function deliverOutputs(inst, rc, r, L, rate, t) {
   if (r.fout) flushFluidOut(inst, r);
   inst.progress = 0; inst.loaded = false;
   inst.stats.made = (inst.stats.made || 0) + 1;
+  if (typeof inst.jobs === 'number' && inst.jobs > 0) inst.jobs--;
   return true;
 }
 function loadInputs(inst, rc, r, L, rate, t) {
@@ -376,6 +383,7 @@ function tickMachine(inst, def, r, L, dt, t) {
   const rate = linkRate(inst.uid);
   if (!rate) return setState(inst, 'no_link', 'Sin conexión al almacén');
   if (effectiveTier(inst) < rc.tier) return setState(inst, 'idle', 'Requiere nivel T' + rc.tier);
+  if (inst.jobs === 0 && !inst.loaded && !(inst.progress > 0)) return setState(inst, 'idle', 'Lote completado');
   if (r.fout && !flushFluidOut(inst, r)) return setState(inst, 'output_full', 'Sin tanque con espacio');
   if (inst.progress >= rc.time && !deliverOutputs(inst, rc, r, L, rate, t)) return setState(inst, 'output_full', r.reason);
   if (!inst.loaded) { const s = loadInputs(inst, rc, r, L, rate, t); if (s) return setState(inst, s.state, s.reason); }
@@ -625,7 +633,7 @@ function init(g) {
 
 LD.Sim.Economy = {
   init, tick, has, take, add, addMany, count, cap, room, rates,
-  rebuildNetworks, linkRate, isLinked, machineSpeed, effectiveTier, gridRatio, powerDemand, integrity, integrityMul, hubMul,
+  rebuildNetworks, linkRate, isLinked, machineSpeed, effectiveTier, gridRatio, powerDemand, integrity, integrityMul, hubMul, setJobs,
   setRecipe, applyRecipeToAll, availableRecipes, elevatorRules, setElevatorRules, discover, invalidateCaps,
   give: (L, id, n) => addRaw(L, id, n, true),
   reason: uid => { const i = G && G.structures[uid]; return i ? i.reason || null : null; },

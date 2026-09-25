@@ -13,6 +13,7 @@ R('hand_rope', 'hand', 0, { plant_fiber: 4 }, { rope: 1 }, 3);
 R('hand_rope_sinew', 'hand', 0, { sinew: 2 }, { rope: 1 }, 3);
 R('hand_hand_tool', 'hand', 0, { stick: 1, flint: 2, rope: 1 }, { hand_tool: 1 }, 3);
 R('hand_arrow', 'hand', 0, { stick: 2, flint: 1, plant_fiber: 1 }, { arrow: 4 }, 3);
+R('hand_arrow_stone', 'hand', 0, { stick: 2, stone: 1, plant_fiber: 1 }, { arrow: 3 }, 3); recipes[recipes.length - 1].name = 'Flecha con punta de piedra';
 R('hand_bone_meal', 'hand', 0, { bone: 2 }, { bone_meal: 2 }, 3);
 
 /* ── workbench (T0) ── */

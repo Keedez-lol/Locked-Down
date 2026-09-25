@@ -28,9 +28,9 @@ const STEPS = [
     progress: () => [['Desplazar la cámara', state.cam.moved], ['Hacer zoom', state.cam.zoomed]],
     check: () => state.cam.moved && state.cam.zoomed },
   { id: 'gather', anchor: 'hud-dock', title: 'Recolección manual',
-    body: () => [['Pulsa ', kbd('H'), ' para coger la herramienta de mano y haz clic sobre árboles y rocas. Cada golpe entrega un objeto y tarda 1,2 s.'], 'Reúne 20 palos y 10 piedras: es lo que necesita tu primera máquina.'],
-    progress: () => [['Palos ' + U.fmtInt(inv0('stick')) + ' / 20', inv0('stick') >= 20], ['Piedra ' + U.fmtInt(inv0('stone')) + ' / 10', inv0('stone') >= 10]],
-    check: () => inv0('stick') >= 20 && inv0('stone') >= 10 },
+    body: () => [['Pulsa ', kbd('H'), ' para coger la herramienta de mano y haz clic sobre árboles y rocas. Cada golpe entrega un objeto y tarda 1,2 s; los árboles alternan palos y troncos.'], ['Los tablones se hacen en el ', el('b', 'Almacén central'), ': haz clic en él y elige la receta «Tablón» (1 tronco → 2). Reúne 20 palos, 6 tablones y 10 piedras.']],
+    progress: () => [['Palos ' + U.fmtInt(inv0('stick')) + ' / 20', inv0('stick') >= 20], ['Tablones ' + U.fmtInt(inv0('plank')) + ' / 6', inv0('plank') >= 6], ['Piedra ' + U.fmtInt(inv0('stone')) + ' / 10', inv0('stone') >= 10]],
+    check: () => inv0('stick') >= 20 && inv0('stone') >= 10 && inv0('plank') >= 6 },
   { id: 'workbench', anchor: 'hud-dock', title: 'Tu primera máquina',
     body: () => [['Pulsa ', kbd('B'), ', abre Procesado y coloca una ', el('b', nameOf('workbench')), ' pegada al Almacén central.'], 'Las estructuras que tocan el almacén quedan enlazadas: reciben y entregan materiales sin cintas.'],
     progress: () => [[nameOf('workbench') + ' colocada', has('workbench')]],
@@ -83,8 +83,10 @@ function renderCard() {
   const card = state.card; U.clear(card);
   const body = (s.body() || []).filter(Boolean).map(p => el('p', p));
   const prog = (s.progress ? s.progress() : []).map(([t, ok]) => el('li' + (ok ? '.ok' : ''), [el('i'), t]));
+  const fold = el('button.tut-fold', { type: 'button', title: state.collapsed ? 'Mostrar el paso' : 'Ocultar mientras lo haces', 'aria-label': 'Plegar tutorial', on: { click: () => { state.collapsed = !state.collapsed; sfx('ui_click'); renderCard(); } } }, state.collapsed ? '▴' : '▾');
+  card.classList.toggle('collapsed', !!state.collapsed);
   card.append(
-    el('div.tut-eyebrow', [el('span', 'Tutorial'), el('b', 'Paso ' + state.step + ' / ' + TOTAL)]),
+    el('div.tut-eyebrow', [el('span', 'Tutorial'), el('b', 'Paso ' + state.step + ' / ' + TOTAL), fold]),
     el('h3', s.title),
     ...body,
     prog.length ? el('ul.tut-progress', prog) : null,

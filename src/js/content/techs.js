@@ -460,7 +460,7 @@ T('plasma_defense', 'Defensa de plasma', 7, ['quantum_assembly'], { rp5: 1800 },
 LD.Content.techs = techs;
 LD.Content.START = {
   structures: ['hub', 'workbench', 'gather_hut', 'woodcutter', 'well', 'quarry', 'torch', 'conveyor_wood', 'pipe_wood', 'tank_wood', 'study_table', 'palisade', 'watchtower', 'elevator'],
-  recipes: ['hand_stick', 'hand_plank', 'hand_rope', 'hand_rope_sinew', 'hand_hand_tool', 'hand_arrow', 'hand_cloth', 'hand_bone_meal',
+  recipes: ['hand_stick', 'hand_plank', 'hand_rope', 'hand_rope_sinew', 'hand_hand_tool', 'hand_arrow', 'hand_arrow_stone', 'hand_cloth', 'hand_bone_meal',
     'workbench_rope', 'workbench_cloth', 'workbench_hand_tool', 'workbench_wooden_gear', 'workbench_wood_frame',
     'tanning_leather', 'kiln_charcoal', 'kiln_charcoal_sticks', 'kiln_brick', 'kiln_ceramic',
     'smelting_copper_ore', 'smelting_tin_ore', 'research_rp0', 'research_rp0_tools', 'ammo_arrow']

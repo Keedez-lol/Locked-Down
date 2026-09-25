@@ -105,13 +105,16 @@ const P = LD.UI.Panel = {
     call(Rn(), 'setSelection', P.uid);
     if (LD.UI.HUD && has(LD.UI.HUD, 'setPanelOpen')) LD.UI.HUD.setPanelOpen(!!P.uid);
     if (P.uid) {
-      P.els.panel.hidden = false;
-      requestAnimationFrame(() => P.els.panel.classList.add('open'));
+      const pnl = P.els.panel;
+      pnl.hidden = false; pnl.style.transform = '';
+      void pnl.offsetWidth;   // flush the display change so the slide starts from the closed transform
+      pnl.classList.add('open');
+      setTimeout(() => { if (P.uid && pnl.classList.contains('open') && getComputedStyle(pnl).transform !== 'none') pnl.style.transform = 'none'; }, 260);
       P.sig = '';
       P.rebuild();
       if (!silent && prev !== P.uid) play('ui_open');
     } else {
-      P.els.panel.classList.remove('open');
+      P.els.panel.classList.remove('open'); P.els.panel.style.transform = '';
       P.sections = [];
       const pnl = P.els.panel;
       setTimeout(() => { if (!P.uid && pnl) { pnl.hidden = true; U.clear(P.els.scroll || pnl); } }, 140);
@@ -159,6 +162,7 @@ const P = LD.UI.Panel = {
       el('div.p-thumb', [thumb(def.id, 52)]),
       el('div.p-title', [
         el('div.p-name', [def.name, el('span.tier-chip', { style: { color: tierColors()[def.tier | 0] } }, 'T' + def.tier)]),
+        def.id === 'hub' ? el('div.label', { style: { marginTop: '.25rem', color: 'var(--verm)' } }, 'Fabricación manual · elige una receta') : null,
         el('div.p-sub.num', layerName(L) + ' · ' + inst.x + ',' + inst.y + ' · ' + (def.size || 1) + '×' + (def.size || 1)),
         st
       ]),
@@ -248,7 +252,19 @@ const P = LD.UI.Panel = {
     tip(all, () => el('div', [el('div.tip-body', 'Asigna esta receta a todas las máquinas del mismo tipo en este estrato.')]));
     const listEl = el('div.rc-list', [...rows, none]);
     if (!rows.length) listEl.appendChild(el('div.p-empty.label', 'SIN RECETAS DISPONIBLES PARA ESTE TIER'));
-    return { el: sec('RECETA', [listEl, all]), update() {} };
+    const setJobs = n => { if (has(Eco, 'setJobs')) Eco.setJobs(P.uid, n); else inst.jobs = n; P.refresh(); };
+    const qtyBtns = [['AUTO', null], ['×1', 1], ['×5', 5], ['×10', 10], ['×25', 25]].map(([t, n]) => { const b = btn(t, () => setJobs(n), 'p-btn-qty'); b.dataset.q = n === null ? 'auto' : String(n); return b; });
+    const qtyIn = el('input.ui-input.mono.rc-qty-in', { type: 'number', min: 1, max: 9999, placeholder: 'n', 'aria-label': 'Cantidad', on: { change: e => { const v = parseInt(e.target.value, 10); if (v > 0) setJobs(v); e.target.value = ''; } } });
+    const pend = el('span.rc-qty-pend.mono.dim', '');
+    const qty = el('div.rc-qty', [el('span.label', 'CANTIDAD'), ...qtyBtns, qtyIn, pend]);
+    qty.hidden = !inst.recipe;
+    tip(qty, () => el('div', [el('div.tip-body', 'AUTO repite la receta sin parar. Un número fabrica ese lote y la máquina se detiene al terminar (la receta se conserva).')]));
+    return { el: sec('RECETA', [listEl, qty, all]), update(i) {
+      qty.hidden = !i.recipe;
+      const j = i.jobs;
+      qtyBtns.forEach(b => b.classList.toggle('current', j === null || j === undefined ? b.dataset.q === 'auto' : false));
+      pend.textContent = j === null || j === undefined ? '∞' : j === 0 ? 'lote completado' : j + ' pendientes';
+    } };
   },
 
   secProgress(inst, def) {

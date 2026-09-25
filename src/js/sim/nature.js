@@ -231,7 +231,7 @@ function tallyGather(inst, def, cfg, d, t) {
     const tdef = terrainDefOf(tid);
     if (tdef && tdef.natural && tdef.natural.item && R.items.has(tdef.natural.item)) addW(tdef.natural.item, tdef.natural.rate || 1);
     if (tid === 'forest' && R.items.has('stick')) addW('stick', 0.6);
-    if (tid === 'rock' && R.items.has('flint')) addW('flint', 0.15);
+    if (tid === 'rock' && R.items.has('flint')) addW('flint', 0.25);
   }
 }
 function tickGather(inst, def, cfg, dt, t) {
@@ -421,7 +421,7 @@ const Nature = Sim.Nature = {
         if (growthAt(x, y) < 0.3) { out.reason = 'young'; out.text = 'Este árbol aún es demasiado joven'; return out; }
         if (gatherAlt) { out.item = 'stick'; out.n = 2; } else { out.item = 'wood_log'; out.n = 1; }
         break;
-      case 'rock': out.item = 'stone'; out.n = 1; out.bonus = 'flint'; out.bonusP = 0.2; break;
+      case 'rock': out.item = 'stone'; out.n = 1; out.bonus = 'flint'; out.bonusP = 0.35; break;
       case 'water': case 'cave_water': case 'deep_water': out.reason = 'water'; out.text = 'Necesitas un pozo o una bomba para extraer agua'; return out;
       default: { const tdef = terrainDefOf(tid); const it = tdef && tdef.natural && tdef.natural.item; if (!it) { out.reason = 'nothing'; out.text = 'Aquí no hay nada que recolectar'; return out; } out.item = it; out.n = 1; }
     }
