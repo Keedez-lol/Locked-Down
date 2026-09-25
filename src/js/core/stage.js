@@ -24,6 +24,11 @@ const Stage = LD.Stage = {
     document.documentElement.style.fontSize = (scale * 16 * uiScale) + 'px';
     LD.Events.emit('stage:resize', Stage.size());
   },
+  setBackdrop(kind) {
+    document.body.classList.toggle('backdrop-paper', kind === 'paper');
+    document.body.classList.toggle('backdrop-ink', kind !== 'paper');
+    if (LD.Tex && LD.Tex.backdrop) { try { document.body.style.backgroundImage = 'url(' + LD.Tex.backdrop(kind) + ')'; } catch (e) { document.body.style.backgroundImage = ''; } }
+  },
   size() { return { w: Stage.width, h: Stage.height, scale: Stage.scale, left: Stage.left, top: Stage.top, dpr: Stage.dpr }; },
   toLogical(clientX, clientY) { return { x: (clientX - Stage.left) / Stage.scale, y: (clientY - Stage.top) / Stage.scale }; },
   fitCanvas(canvas) {

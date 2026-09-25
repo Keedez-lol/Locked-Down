@@ -2,7 +2,7 @@
 'use strict';
 const LD = window.LD, U = LD.U;
 const SAVE_PREFIX = 'lockeddown.save.', SETTINGS_KEY = 'lockeddown.settings', META_KEY = 'lockeddown.meta';
-const VERSION = 1;
+const VERSION = 2;
 
 /* ── settings (global, not per save) ── */
 const S = LD.Settings = {
@@ -45,20 +45,24 @@ const St = LD.State = {
     if (seed === undefined || seed === null || seed === '') seed = Math.floor(Math.random() * 2147483647);
     if (typeof seed === 'string') seed = isFinite(+seed) && seed.trim() !== '' ? (+seed | 0) : U.hashStr(seed);
     const layers = (LD.Registry.layers.length ? LD.Registry.layers : [{ idx: 0 }, { idx: 1 }, { idx: 2 }, { idx: 3 }, { idx: 4 }]).map((L, i) => ({
-      unlocked: i === 0, claimed: {}, deposits: {}, trees: {}, threat: 0, waveAt: 0, waveNo: 0, shaft: null, elevator: null
+      unlocked: i === 0, excavated: {}, digging: {}, deposits: {}, trees: {}, threat: 0, waveAt: 0, waveNo: 0, shaft: null, elevator: null,
+      weather: { kind: 'clear', until: 0, next: null }, energyHandled: 0
     }));
     return {
       v: VERSION,
       meta: { name, created: Date.now(), playtime: 0, difficulty, seed: seed >>> 0, lastSave: 0, era: 0, saveName: '' },
       time: { t: 0, day: 1, dayFrac: 0.3 },
-      inv: {}, caps: { base: 200 },
+      inv: layers.map(() => ({})), caps: { base: 200 },
       discovered: { items: {}, structures: {}, techs: {}, enemies: {}, layers: { 0: true }, recipes: {} },
-      research: { done: {} },
+      research: { done: {}, current: null, queue: [] },
       layers,
       structures: {},
       enemies: [],
-      power: { gen: 0, use: 0, ratio: 1, stored: 0, cap: 0 },
-      stats: { produced: {}, consumed: {}, kills: 0, builds: 0, dismantled: 0, waves: 0 },
+      power: { grids: [] },
+      events: { next: null, active: [] },
+      stats: { produced: {}, consumed: {}, kills: 0, builds: 0, dismantled: 0, waves: 0, hist: {} },
+      blueprints: [],
+      objectives: { done: {}, current: [] },
       log: [],
       view: { layer: 0, cam: [] },
       tutorial: { step: 0, done: false },
@@ -136,7 +140,10 @@ const St = LD.State = {
   migrate(G) {
     const blank = St.blank({ name: G.meta.name, difficulty: G.meta.difficulty, seed: G.meta.seed });
     const merge = (dst, src) => { for (const k in src) if (!(k in dst)) dst[k] = src[k]; };
-    merge(G, blank); merge(G.meta, blank.meta); merge(G.time, blank.time); merge(G.stats, blank.stats); merge(G.discovered, blank.discovered); merge(G.power, blank.power);
+    merge(G, blank); merge(G.meta, blank.meta); merge(G.time, blank.time); merge(G.stats, blank.stats); merge(G.discovered, blank.discovered); merge(G.research, blank.research); merge(G.events, blank.events);
+    if (!Array.isArray(G.inv)) G.inv = blank.inv.map((o, i) => i === 0 && G.inv && typeof G.inv === 'object' ? G.inv : {});
+    while (G.inv.length < blank.inv.length) G.inv.push({});
+    if (!G.power || !Array.isArray(G.power.grids)) G.power = blank.power;
     while (G.layers.length < blank.layers.length) G.layers.push(blank.layers[G.layers.length]);
     G.layers.forEach((L, i) => merge(L, blank.layers[i]));
     G.v = VERSION;

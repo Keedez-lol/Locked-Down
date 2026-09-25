@@ -1,11 +1,29 @@
 # CANON — fixed id lists (binding for every module)
 
-## A. Structures (109). Columns: id | name (es) | cat | tier | size | sprite | sfx | power/notes
+## A. Structures (131). Columns: id | name (es) | cat | tier | size | sprite | sfx | power/notes
 Content agent fills cost/desc/details; sprite agent implements every sprite key; audio agent every sfx key.
 
 ### core / logistics / storage
 hub | Almacén central | core | 0 | 3 | hub | - | placed at start, storage.cap 500, indestructible (hp floor 10%)
-elevator | Elevador de recursos | core | 2 | 2 | elevator | pump | auto-placed at lower-layer centre when shaft completes
+elevator | Elevador de recursos | core | 2 | 2 | elevator | pump | auto-placed at lower-layer centre when shaft completes; elevator.rate 5; also buildable
+elevator_steel | Elevador de acero | logistics | 3 | 2 | elevator | pump | elevator.rate 20, expensive
+elevator_industrial | Elevador industrial | logistics | 5 | 2 | elevator | electric_hum | elevator.rate 80, expensive
+elevator_quantum | Elevador cuántico | logistics | 7 | 2 | elevator | quantum | elevator.rate 400, expensive, heatproof
+drive_shaft | Eje de transmisión | logistics | 1 | 1 | cable | - | overlay cable, cap 10 kW (mechanical)
+cable_copper | Cable de cobre | logistics | 2 | 1 | cable | - | overlay cable, cap 300 kW
+cable_hv | Cable de alta tensión | logistics | 4 | 1 | cable | - | overlay cable, cap 20 MW
+cable_super | Cable superconductor | logistics | 7 | 1 | cable | - | overlay cable, cap unlimited, heatproof
+pipe_wood | Canalización de madera | logistics | 0 | 1 | pipe | - | overlay pipe, rate 2
+pipe_bronze | Tubería de bronce | logistics | 1 | 1 | pipe | - | overlay pipe, rate 8
+pipe_steel | Tubería de acero | logistics | 3 | 1 | pipe | - | overlay pipe, rate 40
+pipe_titanium | Tubería de titanio | logistics | 5 | 1 | pipe | - | overlay pipe, rate 200
+pipe_quantum | Tubería cuántica | logistics | 7 | 1 | pipe | - | overlay pipe, rate unlimited, heatproof
+tank_wood | Tonel | storage | 0 | 1 | tank | - | tank.cap 300
+tank_iron | Depósito de hierro | storage | 2 | 1 | tank | - | tank.cap 2000
+tank_steel | Tanque de acero | storage | 3 | 2 | tank | - | tank.cap 10000
+tank_titanium | Tanque de titanio | storage | 5 | 2 | tank | - | tank.cap 60000
+tank_cryo | Tanque criogénico | storage | 6 | 2 | tank | cryo | tank.cap 30000, cryo:true, use 50 kW
+tank_quantum | Tanque cuántico | storage | 7 | 3 | tank | quantum | tank.cap 2000000, cryo:true, use 1 MW, heatproof
 conveyor_wood | Rodillos de madera | logistics | 0 | 1 | conveyor | - | rate 2
 conveyor_iron | Cinta de hierro | logistics | 2 | 1 | conveyor | - | rate 8
 conveyor_steel | Cinta de acero | logistics | 3 | 1 | conveyor | - | rate 24
@@ -43,6 +61,12 @@ bonsai | Bonsái industrial | nature | 3 | 1 | bonsai | bonsai | wood_log 0.15/s
 bonsai_hydro | Bonsái hidropónico | nature | 5 | 1 | bonsai_hydro | bonsai | wood_log 0.6/s, resin, water 0.15/s, use 2 kW
 algae_farm | Estanque de algas | nature | 4 | 3 | algae_farm | farm | algae 0.8/s, water 0.3/s, use 5 kW
 greenhouse | Invernadero | nature | 4 | 3 | greenhouse | farm | plant_fiber, rubber_sap, sapling; water; use 15 kW
+
+### excavation (lower layers; borer.rate tiles/s, tier ≥ layer borerTier)
+borer_steam | Tuneladora de vapor | extract | 2 | 2 | borer | drill_steam | borer.rate 2, burn 0.05 MJ/s + water (pipe)
+borer_electric | Tuneladora eléctrica | extract | 3 | 2 | borer | drill_electric | borer.rate 4, use 80 kW
+borer_laser | Tuneladora láser | extract | 5 | 2 | borer | drill_laser | borer.rate 10, use 2 MW
+borer_plasma | Tuneladora de plasma | extract | 7 | 3 | borer | drill_plasma | borer.rate 30, use 60 MW, heatproof
 
 ### extract (deposits)
 mine_hand | Mina a cielo abierto | extract | 0 | 2 | drill | drill_hand | hardnessMax 0, rate 0.25
@@ -128,6 +152,13 @@ tesla_coil | Bobina Tesla | defense | 4 | 1 | tesla_coil | electric_hum | electr
 laser_turret | Torreta láser | defense | 5 | 1 | laser_turret | turret_charge | thermal r9 dmg 45 rate 2, use 400 kW
 plasma_turret | Torreta de plasma | defense | 7 | 2 | plasma_turret | turret_charge | plasma ap r10 dmg 400 rate 1, use 8 MW, heatproof, cost includes carbide_tip + thermal_plate
 
+## A2. Fluids (cat fluid|gas; live in tanks/pipes, never in item inventories)
+water, crude_oil, naphtha, diesel, kerosene, lubricant, tar, sulfuric_acid, hydrochloric_acid, nitric_acid, ammonia,
+chlorine, hydrogen, oxygen, nitrogen, liquid_nitrogen, natural_gas, ethanol, biofuel, latex (rubber_sap is the
+raw fluid from greenhouse → rename: rubber_sap IS the fluid), deuterium_brine, deuterium, tritium, helium3,
+coolant, cryo_coolant, uf6, enriched_uf6, magma, steam (optional). Cryogenic (need tank.cryo): liquid_nitrogen,
+deuterium, tritium, helium3, cryo_coolant, liquid_hydrogen.
+
 ## B. Enemies (15)
 wolf | Lobo | L0 | fast pack hunter, night | none
 boar | Jabalí | L0 | tanky charger | none
@@ -147,7 +178,7 @@ core_guardian | Guardián del núcleo | L4 | boss | void
 Drops: L0 hide/bone/sinew; L1 chitin; L2 crystal_shard; L3 heat_gland (+basalt); L4 void_essence.
 
 ## C. Raw materials (63) — obtained without a recipe
-Surface (L0): wood_log, stick, plant_fiber, stone, flint, clay, sand, water, hide, bone, sinew, resin, sapling,
+Surface (L0): wood_log, stick, plant_fiber, stone, gravel, flint, clay, sand, water (fluid), hide, bone, sinew, resin, sapling,
 copper_ore(h0), tin_ore(h0), iron_ore(h0 rare / h1), peat, salt
 L1 (h1): coal, limestone, sulfur, saltpeter, crude_oil (h2, pumpjack), (iron_ore, flint, salt also here)
 L2 (h2–3): zinc_ore, lead_ore, silver_ore, gold_ore, nickel_ore, quartz, amethyst, bauxite, chromite,
@@ -165,3 +196,16 @@ rp3 Ciencia química, rp4 Ciencia nuclear, rp5 Ciencia cuántica. Category `scie
 ## E. Ammo items
 arrow (stick+flint+plant_fiber), ballista_bolt (iron_rod+plank), cannon_shell (steel+black_powder),
 bullet (brass+black_powder). Category `ammo`.
+
+## F. SFX keys (audio.js must implement all)
+Machine loops: furnace, kiln, forge, hammer, saw, mill, steam, boiler, crusher, press, lathe, wiremill, assembler,
+electric_hum, chemical, refinery, electrolyzer, centrifuge, compressor, arc, vacuum, enrichment, cryo, fabricator,
+nano, quantum, drill_hand, drill_steam, drill_electric, drill_laser, drill_plasma, pump, wheel, windmill,
+generator_diesel, turbine, reactor, fusion, lab, turret_charge, waterwheel, farm, bonsai.
+One-shots: ui_click, ui_hover, ui_open, ui_close, ui_tab, build_place, build_done, dismantle, repair, research,
+research_done, discover, wave_warning, wave_start, wave_end, brownout, integrity_low, structure_broken, excavated,
+event_warning, weather_rain, weather_storm, shot_arrow, shot_ballista, shot_cannon, shot_gatling, shot_laser,
+shot_tesla, shot_plasma, hit, enemy_die, growl, screech, crystal_chime, magma_roar, void_whisper, layer_switch,
+save, error, objective, blueprint_paste, gather.
+Ambience beds (Audio.ambient(layer, night, weather)): surface_day (wind, birds), surface_night (crickets, wind),
+rain, storm, caves (drips, low rumble), deep (crystal hum), abyss (heat, sub-bass), core (void drone).

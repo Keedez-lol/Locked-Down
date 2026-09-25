@@ -16,8 +16,8 @@ const err = m => errors.push(m), warn = m => warns.push(m);
 const CANON = fs.readFileSync(path.join(root, 'docs/CANON.md'), 'utf8');
 const canonStructures = [...CANON.matchAll(/^([a-z0-9_]+) \| [^|]+\| (core|logistics|storage|nature|extract|process|power|research|defense|special) \| (\d) \| (\d) \| ([a-z0-9_]+) \| ([a-z0-9_-]+) \|/gm)].map(m => ({ id: m[1], cat: m[2], tier: +m[3], size: +m[4], sprite: m[5], sfx: m[6] }));
 const canonEnemies = [...CANON.matchAll(/^([a-z_]+) \| [^|]+ \| L(\d) \|/gm)].map(m => ({ id: m[1], layer: +m[2] }));
-const canonRaw = (() => { const sec = CANON.split('## C.')[1].split('## D.')[0]; return [...sec.matchAll(/\b([a-z][a-z0-9_]+)(?:\((?:h\d[^)]*|infinite[^)]*)\))?/g)].map(m => m[1]).filter(id => R.items.has(id) || /_ore$|^(wood_log|stick|plant_fiber|stone|flint|clay|sand|water|hide|bone|sinew|resin|sapling|peat|salt|coal|limestone|sulfur|saltpeter|crude_oil|quartz|amethyst|bauxite|chromite|natural_gas|rutile|wolframite|spodumene|molybdenite|vanadinite|monazite|uraninite|thorite|diamond_raw|ruby_raw|sapphire_raw|obsidian|basalt|corestone|plasma_crystal|magma|deuterium_brine|helium3|algae|rubber_sap|chitin|crystal_shard|heat_gland|void_essence)$/.test(id)); })();
-const RECIPE_TYPES = 'hand, workbench, kiln, smelting, blast, forging, sawing, crushing, tanning, pressing, lathe, wiremill, assembling, mixing, distilling, chemical, refining, electrolysis, centrifuge, compressing, arc, vacuum, fabrication, enrichment, nuclear_fab, cryo, quantum, research, ammo'.split(', ');
+const canonRaw = (() => { const sec = CANON.split('## C.')[1].split('## D.')[0]; return [...sec.matchAll(/\b([a-z][a-z0-9_]+)(?:\((?:h\d[^)]*|infinite[^)]*)\))?/g)].map(m => m[1]).filter(id => R.items.has(id) || /_ore$|^(wood_log|stick|plant_fiber|stone|flint|clay|sand|water|gravel|hide|bone|sinew|resin|sapling|peat|salt|coal|limestone|sulfur|saltpeter|crude_oil|quartz|amethyst|bauxite|chromite|natural_gas|rutile|wolframite|spodumene|molybdenite|vanadinite|monazite|uraninite|thorite|diamond_raw|ruby_raw|sapphire_raw|obsidian|basalt|corestone|plasma_crystal|magma|deuterium_brine|helium3|algae|rubber_sap|chitin|crystal_shard|heat_gland|void_essence)$/.test(id)); })();
+const RECIPE_TYPES = 'hand, workbench, kiln, smelting, blast, forging, sawing, crushing, washing, tanning, pressing, lathe, wiremill, assembling, mixing, distilling, chemical, refining, electrolysis, centrifuge, compressing, arc, vacuum, fabrication, enrichment, nuclear_fab, cryo, quantum, research, ammo'.split(', ');
 const ITEM_CATS = 'raw ore crushed ingot plate rod gear wire part component circuit fluid gas chemical fuel nuclear crystal organic building ammo science exotic'.split(' ');
 const SFX_KEYS = new Set('furnace, kiln, forge, hammer, saw, mill, steam, boiler, crusher, press, lathe, wiremill, assembler, electric_hum, chemical, refinery, electrolyzer, centrifuge, compressor, arc, vacuum, enrichment, cryo, fabricator, nano, quantum, drill_hand, drill_steam, drill_electric, drill_laser, drill_plasma, pump, wheel, windmill, generator_diesel, turbine, reactor, fusion, lab, turret_charge, waterwheel, farm, bonsai'.split(', ').concat(['-']));
 
@@ -49,6 +49,7 @@ for (const L of R.layers) for (const d of (L.deposits || [])) { if (!R.items.has
 for (const t of R.terrains.values()) if (t.natural && t.natural.item) { if (!R.items.has(t.natural.item)) err(`terrain ${t.id}: natural item unknown`); else addSrc(t.natural.item, 'terrain:' + t.id); }
 for (const e of R.enemies.values()) for (const k in (e.drops || {})) { if (!R.items.has(k)) err(`enemy ${e.id}: drop ${k} unknown`); else addSrc(k, 'drop:' + e.id); }
 for (const s of R.structures.values()) if (s.nature && s.nature.out) for (const k in s.nature.out) { if (!R.items.has(k)) err(`structure ${s.id}: nature out ${k} unknown`); else addSrc(k, 'nature:' + s.id); }
+for (const s of R.structures.values()) if (s.borer) { addSrc('stone', 'borer:' + s.id); if (R.items.has('gravel')) addSrc('gravel', 'borer:' + s.id); }
 for (const s of R.structures.values()) if (s.nature && s.nature.byproducts) for (const k in s.nature.byproducts) { if (!R.items.has(k)) err(`structure ${s.id}: byproduct ${k} unknown`); else addSrc(k, 'nature:' + s.id); }
 /* every item obtainable & used */
 let rawCount = 0, compCount = 0;
@@ -57,7 +58,7 @@ for (const it of R.items.values()) {
   if (!src.length) err(`item ${it.id}: not obtainable anywhere`);
   const byRecipe = src.some(s => s.startsWith('recipe:'));
   if (!byRecipe) rawCount++; else compCount++;
-  const used = (R.consuming.get(it.id) || []).length > 0 || [...R.structures.values()].some(s => (s.power && s.power.fuel && s.power.fuel.includes(it.id)) || (s.burn && s.burn.fuels && s.burn.fuels.includes(it.id)) || (s.turret && s.turret.ammo && s.turret.ammo[it.id]) || (s.nature && s.nature.consumes && s.nature.consumes[it.id]) || (s.extract && s.extract.consumes && s.extract.consumes[it.id]));
+  const used = (R.consuming.get(it.id) || []).length > 0 || [...R.structures.values()].some(s => (s.power && s.power.fuel && s.power.fuel.includes(it.id)) || (s.burn && s.burn.fuels && s.burn.fuels.includes(it.id)) || (s.turret && s.turret.ammo && s.turret.ammo[it.id]) || (s.nature && s.nature.consumes && s.nature.consumes[it.id]) || (s.extract && s.extract.consumes && s.extract.consumes[it.id]) || (s.power && s.power.fluidIn && s.power.fluidIn[it.id]) || (s.burn && s.burn.fluidIn && s.burn.fluidIn[it.id]) || (s.borer && s.borer.consumes && s.borer.consumes[it.id]));
   const usedByTech = [...R.techs.values()].some(t => t.cost && t.cost[it.id]);
   if (!used && !usedByTech && it.cat !== 'exotic' && !it.final) warn(`item ${it.id}: never consumed (mark final:true if intended)`);
 }
@@ -65,6 +66,28 @@ if (rawCount < 60) err(`only ${rawCount} raw materials (need ≥60)`);
 if (compCount < 100) err(`only ${compCount} crafted items (need ≥100)`);
 for (const id of canonRaw) if (!R.items.has(id)) err(`canon raw material missing from items: ${id}`);
 
+/* fluids */
+const isFluid = it => it.cat === 'fluid' || it.cat === 'gas';
+const CRYO = new Set(['liquid_nitrogen', 'deuterium', 'tritium', 'helium3', 'cryo_coolant', 'liquid_hydrogen']);
+const tanks = [...R.structures.values()].filter(s => s.tank);
+for (const it of R.items.values()) if (isFluid(it)) {
+  const ok = tanks.some(t => t.tier <= it.tier + 1 && (!CRYO.has(it.id) || t.tank.cryo));
+  if (!ok) err(`fluid ${it.id}: no tank of tier ≤ ${it.tier + 1}${CRYO.has(it.id) ? ' with cryo' : ''}`);
+}
+for (const s of R.structures.values()) {
+  if (s.power && s.power.fluidIn) for (const f in s.power.fluidIn) { const it = R.items.get(f); if (!it) err(`structure ${s.id}: fluidIn ${f} unknown`); else if (!isFluid(it)) err(`structure ${s.id}: fluidIn ${f} is not a fluid`); }
+  if (s.overlay && !['cable', 'pipe'].includes(s.overlay)) err(`structure ${s.id}: bad overlay ${s.overlay}`);
+  if (s.overlay === 'cable' && !(s.cable && s.cable.cap > 0)) err(`structure ${s.id}: cable overlay needs cable.cap`);
+  if (s.overlay === 'pipe' && !(s.pipe && s.pipe.rate > 0)) err(`structure ${s.id}: pipe overlay needs pipe.rate`);
+  if (s.tank && !(s.tank.cap > 0)) err(`structure ${s.id}: tank.cap`);
+  if (s.elevator && !(s.elevator.rate > 0)) err(`structure ${s.id}: elevator.rate`);
+  if (s.borer && !(s.borer.rate > 0)) err(`structure ${s.id}: borer.rate`);
+  if (s.shaft && !(s.shaft.layer >= 1 && s.shaft.layer <= 4 && s.shaft.rate > 0)) err(`structure ${s.id}: shaft needs layer 1–4 and rate`);
+}
+for (const rc of R.recipes.values()) {
+  const fluidIn = Object.keys(rc.in).some(k => R.items.get(k) && isFluid(R.items.get(k))), fluidOut = Object.keys(rc.out).some(k => R.items.get(k) && isFluid(R.items.get(k)));
+  if ((fluidIn || fluidOut) && (rc.type === 'hand')) err(`recipe ${rc.id}: hand recipes cannot use fluids`);
+}
 /* structures */
 const canonIds = new Set(canonStructures.map(c => c.id));
 for (const c of canonStructures) {
@@ -103,6 +126,8 @@ for (const t of R.techs.values()) {
   for (const r of (t.requires || [])) if (!R.techs.has(r)) err(`tech ${t.id}: requires unknown ${r}`);
   for (const k in (t.cost || {})) if (!R.items.has(k)) err(`tech ${t.id}: cost item ${k} unknown`);
   if (!Object.keys(t.cost || {}).length) err(`tech ${t.id}: no cost`);
+  if (!(t.time > 0)) err(`tech ${t.id}: needs time > 0`);
+  if (!(typeof t.lab === 'number' && t.lab >= 0 && t.lab <= 3)) err(`tech ${t.id}: needs lab 0–3`);
   for (const sid of (t.unlocks && t.unlocks.structures) || []) { if (!R.structures.has(sid)) err(`tech ${t.id}: unlocks unknown structure ${sid}`); unlockCount.set('s:' + sid, (unlockCount.get('s:' + sid) || 0) + 1); }
   for (const rid of (t.unlocks && t.unlocks.recipes) || []) { if (!R.recipes.has(rid)) err(`tech ${t.id}: unlocks unknown recipe ${rid}`); unlockCount.set('r:' + rid, (unlockCount.get('r:' + rid) || 0) + 1); }
 }
@@ -126,6 +151,7 @@ const recompute = () => {
         if (s.startsWith('nature:')) return unlockedS.has(s.slice(7));
         if (s.startsWith('deposit:')) { const L = +s.slice(9); const dep = R.layers[L].deposits.find(d => d.res === id); const layerOpen = L === 0 || [...unlockedS].some(sid => { const st = R.structures.get(sid); return st && st.shaft && st.shaft.layer >= L && Object.keys(st.cost).every(k => canMake.has(k)); }); if (!layerOpen) return false; return [...unlockedS].some(sid => { const st = R.structures.get(sid); return st && st.extract && st.extract.hardnessMax >= (dep.hardness || 0) && (!st.extract.fluids === !dep.fluid) && Object.keys(st.cost).every(k => canMake.has(k)); }); }
         if (s.startsWith('terrain:')) return true;
+        if (s.startsWith('borer:')) { const st = R.structures.get(s.slice(6)); return unlockedS.has(st.id) && Object.keys(st.cost).every(k => canMake.has(k)); }
         if (s.startsWith('drop:')) { const e = R.enemies.get(s.slice(5)); return e.layer === 0 || [...unlockedS].some(sid => { const st = R.structures.get(sid); return st && st.shaft && st.shaft.layer >= e.layer && Object.keys(st.cost).every(k => canMake.has(k)); }); }
         return false;
       });

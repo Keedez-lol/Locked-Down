@@ -72,6 +72,7 @@ const Z = (() => {
   };
 })();
 const GK = K.glyph, GD = D.glyph, GZ = Z.glyph, GLYPHS = [GK, GD, GZ];
+LD.KDZ.glyphs = { K: GK, D: GD, Z: GZ, meta: { K, D, Z } }; LD.KDZ.PEN_HW = PEN_HW; LD.KDZ.GAP = GAP; LD.KDZ.OVERSHOOT = OVERSHOOT; LD.KDZ.CLEAR = CLEAR; LD.KDZ.INK = '#0c0c0d'; LD.KDZ.BONE = '#ece7dc'; LD.KDZ.VERMILION = '#e8401c';
 GLYPHS.forEach((g, i) => { g.id = i; });
 
 const LOCKUP = (() => {
@@ -108,6 +109,7 @@ const FONT_SRC = {
   '#': '1.2,0 1.6,6|2.6,0 3,6|0.2,2 3.9,2|0.1,4 3.8,4', '(': '2.8,6 1.6,4.8 1.6,1.2 2.8,0', ')': '1.2,6 2.4,4.8 2.4,1.2 1.2,0',
   '<': '3.2,5 0.8,3 3.2,1', '>': '0.8,5 3.2,3 0.8,1', '|': '2,-1 2,7'
 };
+LD.KDZ.font = FONT_SRC;
 const FONT = new Array(256);
 for (const ch in FONT_SRC) FONT[ch.charCodeAt(0)] = FONT_SRC[ch].split('|').map(pl => Float32Array.from(pl.trim().split(/[ ,]+/).map(Number)));
 const NARROW = new Uint8Array(256), NUMERIC = new Uint8Array(256), DIGIT = new Uint8Array(256), DECIMAL = new Uint8Array(256);

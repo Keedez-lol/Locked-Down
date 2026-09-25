@@ -35,8 +35,9 @@ const Main = LD.Main = {
     if (!Main.kdz) Main.kdz = LD.KDZ.init({ canvas: document.getElementById('kdz'), hint: document.getElementById('hint'), fallback: document.getElementById('fallback') });
     Main.kdz.setReducedMotion(!!LD.Settings.get().reducedMotion);
     Main.kdz.start();
+    LD.Stage.setBackdrop('paper');
     LD.UI.Menu.show();
-    if (LD.Audio.unlocked) LD.Music.start();
+    if (LD.Audio.unlocked) LD.Music.menu();
     E.emit('screen:changed', 'menu');
   },
 
@@ -54,7 +55,7 @@ const Main = LD.Main = {
     LD.Sim.init(G, { fresh: false });
     Main.enterGame();
     const elapsed = G.meta.lastSave ? (Date.now() - G.meta.lastSave) / 1000 : 0;
-    if (elapsed > 60) LD.Sim.offline(elapsed);
+    if (elapsed > 120) LD.UI.toast('Has estado fuera ' + U.fmtTime(elapsed) + '. La colonia estaba detenida.', 'info', 4000);
     return G;
   },
 
@@ -63,11 +64,14 @@ const Main = LD.Main = {
     LD.UI.Menu.hide();
     if (Main.kdz) Main.kdz.stop();
     LD.Music.stop(1.2);
+    LD.Stage.setBackdrop('ink');
     document.getElementById('screen-menu').hidden = true;
     document.getElementById('screen-game').hidden = false;
     Main.closeAllOverlays();
     LD.UI.HUD.mount(document.getElementById('hud-root'));
     Main.switchLayer(LD.G.view.layer || 0, true);
+    if (LD.Audio.unlocked) LD.Music.layer(LD.G.view.layer || 0);
+    if (LD.Settings.get().tutorial && !LD.G.tutorial.done) LD.UI.Tutorial.start();
     Main.dirty = false; Main.autosaveAcc = 0; Main.acc = 0; Main.last = 0;
     if (!Main.raf) Main.raf = requestAnimationFrame(Main.loop);
     E.emit('screen:changed', 'game');
@@ -92,7 +96,7 @@ const Main = LD.Main = {
     const prev = G.view.layer;
     G.view.layer = idx;
     LD.Render.setSelection(null);
-    if (!silent && prev !== idx) LD.Audio.play('layer_switch');
+    if (!silent && prev !== idx) { LD.Audio.play('layer_switch'); if (LD.Audio.unlocked) LD.Music.layer(idx); }
     E.emit('layer:changed', idx);
   },
 
@@ -128,7 +132,7 @@ const Main = LD.Main = {
 
   /* ── input ── */
   bindGlobalInput() {
-    const unlockAudio = () => { LD.Audio.init(); if (LD.Audio.unlocked && Main.screen === 'menu' && !LD.Music.playing) LD.Music.start(); };
+    const unlockAudio = () => { LD.Audio.init(); if (LD.Audio.unlocked && !LD.Music.playing) { if (Main.screen === 'menu') LD.Music.menu(); else if (Main.screen === 'game' && LD.G) LD.Music.layer(LD.G.view.layer || 0); } };
     addEventListener('pointerdown', unlockAudio, { passive: true });
     addEventListener('keydown', unlockAudio, { passive: true });
     addEventListener('keydown', e => {
@@ -148,10 +152,13 @@ const Main = LD.Main = {
         case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5': Main.switchLayer(+e.code.slice(5) - 1); break;
         case 'KeyB': LD.UI.Build.toggle(); break;
         case 'KeyE': LD.UI.Encyclopedia.toggle(); break;
-        case 'KeyR': LD.UI.Encyclopedia.toggle('techs'); break;
+        case 'KeyT': LD.UI.Encyclopedia.toggle('techs'); break;
+        case 'KeyR': if (LD.UI.Build.mode === 'build' || LD.UI.Build.mode === 'paste') LD.UI.Build.rotate(); else LD.UI.Encyclopedia.toggle('techs'); break;
         case 'KeyX': LD.UI.Build.setMode(LD.UI.Build.mode === 'dismantle' ? 'normal' : 'dismantle'); break;
         case 'KeyH': LD.UI.Build.setMode(LD.UI.Build.mode === 'hand' ? 'normal' : 'hand'); break;
-        case 'KeyT': LD.UI.Build.setMode(LD.UI.Build.mode === 'claim' ? 'normal' : 'claim'); break;
+        case 'KeyC': LD.UI.Build.setMode(LD.UI.Build.mode === 'select' ? 'normal' : 'select'); break;
+        case 'KeyV': LD.UI.Build.pasteLast && LD.UI.Build.pasteLast(); break;
+        case 'KeyG': LD.UI.Stats.toggle(); break;
         case 'Space': e.preventDefault(); LD.Sim.setPaused(!LD.Sim.paused); LD.UI.toast(LD.Sim.paused ? 'Simulación en pausa' : 'Simulación reanudada', 'info', 1200); break;
         case 'F3': e.preventDefault(); LD.Settings.set({ showFps: !LD.Settings.get().showFps }); break;
         default: break;

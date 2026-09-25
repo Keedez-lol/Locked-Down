@@ -1,15 +1,18 @@
-# LOCKED DOWN — Architecture & Content Contract
+# KDZDUSTRY — Architecture & Content Contract (v2, after questionnaire)
 
 Single-file HTML idle/incremental factory game. Spanish UI. Everything procedural (no external assets, no CDN).
-This document is the binding contract between all modules. Read it fully before writing any module.
+Binding for every module. Read fully, plus docs/CANON.md, docs/API.md, docs/DECISIONS.md, and the code in
+src/js/core and src/js/main.js before writing anything.
 
 ## 0. Vision
 
-You are sealed inside a territory above five strata of a planet's crust. Start in a medieval era with sticks and
-stones; end extracting neutronium from the core with fusion power. GregTech-flavoured: long material chains,
-voltage-like tiers, overclocking, integrity/wear, power in W/kW/MW/GW, realistic fuel chains (uranium ore →
-yellowcake → UF6 → enrichment → pellets → fuel rods → fission reactor). Base defense against hostile fauna
-(surface) up to void entities (core). Territory expansion by chunks. Encyclopedia of everything discovered.
+You are sealed above five strata of a planet's crust. Start in a medieval era with sticks and stones; end
+extracting neutronium from the core with fusion power. GregTech-flavoured: long material chains, voltage-like
+tiers, overclocking, integrity/wear, power in W/kW/MW/GW, separate cable and pipe networks, tanks, realistic
+fuel chains (uranium ore → yellowcake → UF6 → enrichment → pellets → fuel rods → fission reactor). Base defense
+against hostile fauna (surface) up to void entities (core). Lower strata are solid rock you must excavate chunk
+by chunk with tunnel borers. Inventory is per stratum; elevators haul between strata. Encyclopedia of everything
+discovered. No offline progress.
 
 Tone: technical drawing / Swiss modular grid / matte minimalism. The main menu background is the KDZ kinetic
 typography piece (WebGL2, ink #0c0c0d on bone paper #ece7dc, vermilion #e8401c accents, monospace uppercase
@@ -17,349 +20,344 @@ labels with wide tracking, hairline rules, "DWG NO." title blocks). The whole ga
 
 ## 1. Visual identity (binding)
 
-CSS tokens (defined in `src/css/base.css`, use them, never hardcode colours in modules):
-
+CSS tokens in `src/css/00_base.css` (use them; never hardcode colours in modules):
 ```
---ink:#0c0c0d  --ink2:#141416  --ink3:#1c1c1f  --ink4:#26262a
+--ink:#0c0c0d  --ink2:#141416  --ink3:#1c1c1f  --ink4:#26262a  --ink5:#333338
 --bone:#ece7dc --bone2:#c9c4b8 --bone3:#8f8b82 --bone4:#5a5751
 --line:rgba(236,231,220,.14)  --line2:rgba(236,231,220,.28)
---verm:#e8401c --verm2:#f0704f
---ok:#8fb87a --warn:#d9a441 --bad:#e8401c --info:#7aa6c9
---mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace
---sans: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif
+--verm:#e8401c --verm2:#f0704f  --ok:#8fb87a --warn:#d9a441 --bad:#e8401c --info:#7aa6c9
+--mono: ui-monospace,"SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace
+--sans: "Inter","Helvetica Neue",Helvetica,Arial,sans-serif
 ```
-
 Rules:
-- Matte. No drop shadows, no glossy gradients, no rounded blobs (max radius 2px), no emoji. Hairline 1px rules.
-- Labels: monospace, uppercase, letter-spacing .12em–.18em, sizes 10–12px (in rem units, see stage scaling).
-- Body text: sans, 13–14px. Numbers: monospace, tabular.
-- Accent = vermilion, used sparingly (active state, alerts, the one CTA).
-- In-game UI is ink-dark (panels `--ink2`, borders `--line`). Menu overlays over the KDZ paper are ink slabs
-  (bone text on ink) or paper sheets (ink text on bone) — never grey translucent boxes.
-- Icons are drawn (canvas or inline SVG), monoline, 1.5px strokes, never emoji.
-- World rendering is naturalistic but desaturated/matte, no cartoon outlines.
+- Matte. No drop shadows, no glossy gradients, max radius 2px, no emoji. Hairline 1px rules. Flat fills.
+- Labels: monospace, uppercase, letter-spacing .12–.18em, 10–12px (rem-based). Body: sans 13–14px. Numbers:
+  monospace tabular.
+- Accent = vermilion, sparingly (active state, alerts, the one CTA). Semantic colours (ok/warn/bad) only for state.
+- **In-game UI is entirely ink-dark** (decision 3): panels `--ink2`, borders `--line`, text `--bone`. Encyclopedia,
+  pause, settings, modals: dark too. Only the main menu sits on the KDZ paper, with an **ink slab on the left**
+  (decision 4) holding the drawn KDZDUSTRY lockup and the options (bone text on ink).
+- Title lockup (decision 5): drawn on a canvas with the KDZ monoline pen (round pen, stencil gaps): the hero K, D,
+  Z glyph geometry from kdz.js (exported as `LD.KDZ.glyphs` — see kdz.js `api.glyphs`) followed by "DUSTRY" in the
+  same 4×6 technical lettering (`LD.KDZ.font`), plus mono subtitle "SIMULADOR INDUSTRIAL DE ESTRATOS".
+- Letterbox bands outside the 16:9 stage (decision 8): body background = textured paper (menu) / textured ink
+  (game), switched by `LD.Stage.setBackdrop('paper'|'ink')` (CSS class on body, noise via `LD.Tex.noiseCanvas`).
+- Icons drawn (canvas/inline SVG), monoline 1.5px. World rendering naturalistic but desaturated/matte.
 
 ## 2. Stage & scaling (16:9)
 
-`#stage` is a 1920×1080 logical box centred in the viewport with letterboxing. `LD.Stage` sets
-`document.documentElement.style.fontSize = (stageWidthPx / 1920 * 16) + 'px'`, so **all CSS must use `rem`**
-(1rem = 16 logical px) and never `px`/`vw`/`vh` for sizes (1px hairlines are the only exception, written as
-`1px`). Canvases are `1920×1080 × min(devicePixelRatio,2)` backing pixels, CSS-sized to the stage.
-`LD.Stage.toLogical(clientX, clientY)` → `{x,y}` in 1920×1080 space.
+`#stage` is a 1920×1080 logical box centred with letterboxing. `LD.Stage` sets the root font-size to
+`stageWidthPx/1920*16px`, so **all CSS uses `rem`** (1rem = 16 logical px); `1px` only for hairlines. Canvases:
+1920×1080 × min(dpr,2) backing pixels. `LD.Stage.toLogical(clientX, clientY)` → logical coords.
 
 ## 3. Files, namespaces, build
 
-No module system. Every file is an IIFE that attaches to the global `LD` object (`window.LD`). Build order
-(`build.js` concatenates in this exact order into `dist/index.html`; CSS files in alphabetical order into one
-`<style>`):
-
+No module system. Each file is an IIFE attaching to the global `LD`. Build order (`build.js`):
 ```
-src/js/core/util.js        LD.U        (written, do not rewrite; extend only by adding functions)
-src/js/core/events.js      LD.Events
-src/js/core/registry.js    LD.Registry (indexes LD.Content.*)
-src/js/core/state.js       LD.State, LD.Settings, LD.G (current game)
-src/js/core/stage.js       LD.Stage
-src/js/content/items.js    LD.Content.items[]
-src/js/content/recipes.js  LD.Content.recipes[]
-src/js/content/structures.js LD.Content.structures[]
-src/js/content/techs.js    LD.Content.techs[]
-src/js/content/enemies.js  LD.Content.enemies[]
-src/js/content/layers.js   LD.Content.layers[], LD.Content.terrains[]
-src/js/content/guides.js   LD.Content.guides[] (encyclopedia mechanics articles)
-src/js/gen/textures.js     LD.Tex   (terrain tiles, icons)
-src/js/gen/sprites.js      LD.Sprites (structure & enemy sprites)
-src/js/gen/world.js        LD.World (worldgen, tile access, territory)
-src/js/sim/economy.js      LD.Sim.Economy (inventory, recipes, machines, logistics)
-src/js/sim/power.js        LD.Sim.Power
-src/js/sim/build.js        LD.Sim.Build (construction, dismantle, integrity, repair, overclock)
-src/js/sim/research.js     LD.Sim.Research
-src/js/sim/nature.js       LD.Sim.Nature (trees, regrowth, farms, water, gathering)
-src/js/sim/defense.js      LD.Sim.Defense (waves, enemies, turrets, walls)
-src/js/sim/sim.js          LD.Sim (tick orchestration, offline progress, debug API)
-src/js/render/particles.js LD.Particles
-src/js/render/render.js    LD.Render (camera, world, lighting, overlays)
-src/js/audio/audio.js      LD.Audio (engine, mixer, sfx synths, machine loops)
-src/js/audio/music.js      LD.Music (menu ambient)
-src/js/ui/ui.js            LD.UI (shared widgets: modal, toast, tooltip, icon helpers, number formatting hooks)
-src/js/ui/menu.js          LD.UI.Menu (main menu + KDZ adapter hooks, new game/continue/slots)
-src/js/ui/hud.js           LD.UI.HUD (top bar, strata widget, inventory tray, layer switch, notifications)
-src/js/ui/build.js         LD.UI.Build (build palette, placement, dismantle mode)
-src/js/ui/panel.js         LD.UI.Panel (selected structure panel, recipe picker, OC, repair)
-src/js/ui/encyclopedia.js  LD.UI.Encyclopedia (also research/tech tree view)
-src/js/ui/settings.js      LD.UI.Settings
-src/js/ui/pause.js         LD.UI.Pause (ESC menu: continuar, guardar, enciclopedia, ajustes, salir)
-src/js/vendor/kdz.js       LD.KDZ (adapted animation: init(canvas) → {start, stop, seek})
-src/js/main.js             LD.Main (boot, screen state machine, game loop)
+core/util.js LD.U · core/events.js LD.Events · core/registry.js LD.Registry · core/state.js LD.State/LD.Settings/LD.G · core/stage.js LD.Stage
+content/items.js · recipes.js · structures.js · techs.js · enemies.js · layers.js · guides.js   (LD.Content.*)
+gen/textures.js LD.Tex · gen/sprites.js LD.Sprites · gen/world.js LD.World
+sim/economy.js LD.Sim.Economy · sim/fluids.js LD.Sim.Fluids · sim/power.js LD.Sim.Power · sim/build.js LD.Sim.Build
+sim/research.js LD.Sim.Research · sim/nature.js LD.Sim.Nature · sim/defense.js LD.Sim.Defense
+sim/events.js LD.Sim.Events (weather + special events) · sim/stats.js LD.Sim.Stats · sim/sim.js LD.Sim (+ LD.Debug)
+render/particles.js LD.Particles · render/render.js LD.Render
+audio/audio.js LD.Audio · audio/music.js LD.Music
+ui/ui.js LD.UI · ui/menu.js LD.UI.Menu · ui/hud.js LD.UI.HUD · ui/build.js LD.UI.Build · ui/panel.js LD.UI.Panel
+ui/encyclopedia.js LD.UI.Encyclopedia · ui/settings.js LD.UI.Settings · ui/pause.js LD.UI.Pause · ui/tutorial.js LD.UI.Tutorial · ui/stats.js LD.UI.Stats
+vendor/kdz.js LD.KDZ · main.js LD.Main
 ```
+Each file: `(() => { 'use strict'; const LD = window.LD; ... })();`. Never `import`/`export`. Resolve other
+namespaces at call time, not at file top level. CSS files in `src/css/` (alphabetical concat): `00_base.css`
+(exists), `10_menu.css`, `20_hud.css`, `30_panels.css`, `40_encyclopedia.css`, `50_overlays.css`.
+Build: `node build.js` → `dist/index.html`. `node tools/validate.js` validates content. `node tools/smoke.mjs`
+runs Playwright headless smoke tests (screenshots in `tools/out/`).
 
-Each file starts with `(() => { 'use strict'; const LD = window.LD; ... })();` and ends there. Never use
-`import`/`export`. Never rely on load order at definition time other than `LD.U` (core) being present; resolve
-other namespaces at call time (`LD.Sim.Economy.x()` inside functions, not at file top level).
+## 4. Core APIs (implemented; read the code in src/js/core)
 
-Build: `node build.js` → `dist/index.html` (single file). `node tools/validate.js` validates content.
-`node tools/smoke.mjs` runs Playwright headless smoke tests and screenshots into `tools/out/`.
+`LD.U` (math, `fmt`, `fmtW`, `fmtTime`, `fmtClock`, hashing/rng/noise, colour, `el()` DOM builder, `esc`,
+`canvas`), `LD.Events` (`on/once/off/emit`), `LD.Registry` (Maps + indexes, `recipesFor`, `producers`,
+`consumers`, `unlockerOf`, `structuresByCat`, `isStart`), `LD.State`/`LD.Settings`/`LD.G`, `LD.Stage`.
+Event names (emit exactly these): `game:new, game:loaded, game:saved, tick({t}), inv:changed({layer,item}),
+item:discovered(id), tech:researched(id), tech:started(id), structure:placed(uid), structure:built(uid),
+structure:removed(uid), structure:selected(uid|null), structure:broken(uid), layer:changed(idx),
+layer:unlocked(idx), chunk:excavated({layer,cx,cy}), wave:incoming({layer,at}), wave:started({layer}),
+wave:ended({layer}), enemy:killed(enemy), power:brownout({layer,grid}), weather:changed({kind}),
+event:announced(ev), event:started(ev), event:ended(ev), toast({text,kind}), screen:changed(name),
+tutorial:step(n), objective:done(id), settings:changed(s), stage:resize(size)`.
 
-## 4. Core APIs (implemented in src/js/core — read the code)
+## 5. Content schemas
 
-- `LD.U`: math (`clamp, lerp, smooth, easeOut...`), `fmt(n)` compact numbers with es-ES style, `fmtW(watts)` →
-  `"1,20 kW"`, `fmtJ`, `fmtTime(s)`, `fmtPct`, `hash2(x,y,seed)`, `rng(seed)` (mulberry32), `noise2`, `fbm`,
-  `hex→rgb` helpers, `uid()`, `el(tag, attrs, children)` DOM builder, `esc(str)`.
-- `LD.Events.on(name, fn)`/`off`/`emit(name, payload)`. Event names (emit exactly these):
-  `game:new, game:loaded, game:saved, tick, inv:changed(itemId), item:discovered(itemId), tech:researched(id),
-  structure:placed(uid), structure:built(uid), structure:removed(uid), structure:selected(uid|null),
-  structure:broken(uid), layer:changed(idx), layer:unlocked(idx), territory:claimed({layer,cx,cy}),
-  wave:incoming({layer, at}), wave:started({layer}), wave:ended({layer}), enemy:killed(enemy), power:brownout(bool),
-  offline:summary(summary), toast({text, kind}), screen:changed(name)`.
-- `LD.Registry`: `items, recipes, structures, techs, enemies, layers, terrains` (Maps by id) plus
-  `recipesByType(type)`, `recipesFor(structureId)`, `producing(itemId)`, `consuming(itemId)`,
-  `unlockerOf(kind,id)` → techId|null, `structuresByCat(cat)`, `init()` (called by Main after content loads).
-- `LD.State`: `newGame({name, difficulty, seed})`, `save(slot)`, `load(slot)`, `slots()`, `exportString()`,
-  `importString(s)`, `deleteSlot(slot)`; `LD.G` = live game state (shape §6). `LD.Settings` (global, not per
-  save): `get()`, `set(patch)`, `DEFAULTS`.
-- `LD.Stage`: `init()`, `toLogical(cx,cy)`, `size()` → `{w,h,scale,left,top}`, `on('resize')` via Events
-  (`stage:resize`).
-
-## 5. Content schemas (src/js/content)
-
-All ids: lowercase snake_case ASCII. All display names Spanish (`name`), with `desc` (1–2 sentences, Spanish,
-technical tone, no fluff) and optionally `lore` (encyclopedia extra paragraph).
+Ids: lowercase snake_case ASCII. Names/desc Spanish, technical tone, no fluff. `desc` 1–2 sentences; optional `lore`.
 
 ### 5.1 Item
 ```js
-{ id:'iron_ingot', name:'Lingote de hierro', cat:'ingot', tier:1, color:'#a8a49c', color2:'#6b6862',
-  desc:'...', fuel:0 /* MJ per unit if burnable */, science:false }
+{ id:'iron_ingot', name:'Lingote de hierro', cat:'ingot', tier:1, color:'#a8a49c', color2:'#6b6862', desc:'...',
+  fuel:0 /* MJ per unit if burnable */, final:false /* true = intended end product, never consumed */ }
 ```
 `cat` ∈ `raw | ore | crushed | ingot | plate | rod | gear | wire | part | component | circuit | fluid | gas |
 chemical | fuel | nuclear | crystal | organic | building | ammo | science | exotic`.
-Icons are generated from `cat` + `color`/`color2` by `LD.Tex.icon(itemId, size)`.
+**Items with cat `fluid` or `gas` are fluids**: they never enter item inventories; they live in tanks on pipe
+networks (§7.4). Fluids may still be burnable (`fuel`) for fuel-burning generators that draw from pipes.
 
 ### 5.2 Recipe
 ```js
-{ id:'smelt_iron', type:'smelting', tier:1, in:{iron_ore:1}, out:{iron_ingot:1}, time:6, energy:null,
-  name:null /* derived from first output */ }
+{ id:'smelt_iron', type:'smelting', tier:1, in:{iron_ore:1}, out:{iron_ingot:1}, time:6, energy:null }
 ```
-`type` is a crafting category; a structure lists the `types` it can run. `tier` is the minimum effective tier of the
-machine (native tier + overclock). `time` in seconds at speed 1. `energy` (W) overrides the machine's `power.use`
-while running this recipe (null = machine default). Recipe types (fixed list):
-`hand, workbench, kiln, smelting, blast, forging, sawing, crushing, tanning, pressing, lathe, wiremill,
-assembling, mixing, distilling, chemical, refining, electrolysis, centrifuge, compressing, arc, vacuum,
-fabrication, enrichment, nuclear_fab, cryo, quantum, research, ammo`.
-Fluids/gases are ordinary items (units = litres-ish); no fluid network.
+Types (fixed): `hand, workbench, kiln, smelting, blast, forging, sawing, crushing, washing, tanning, pressing,
+lathe, wiremill, assembling, mixing, distilling, chemical, refining, electrolysis, centrifuge, compressing, arc,
+vacuum, fabrication, enrichment, nuclear_fab, cryo, quantum, research, ammo`. `tier` = minimum effective machine
+tier. `time` seconds at speed 1. `energy` W override (null = machine default). Item and fluid inputs/outputs mix
+freely in `in`/`out`; the sim routes fluids to the pipe network.
 
 ### 5.3 Structure
 ```js
 { id:'steam_engine', name:'Máquina de vapor', cat:'power', tier:2, size:2, sprite:'steam_engine', sfx:'steam',
-  cost:{ iron_plate:12, bronze_gear:4, brick:20, copper_pipe:6 }, buildTime:6, hp:600,
-  power:{ gen:60000, fuel:['coal','coke','charcoal','wood_log'], water:0.2 } // producer
-  // or power:{ use:30000 } consumer, or none for T0 fuel machines: burn:{ mjPerSec:0.05, fuels:[...] }
+  cost:{ iron_plate:12, bronze_gear:4, brick:20, bronze_pipe:6 }, buildTime:6, hp:600, complexity:2,
+  power:{ gen:60000, fuel:['coal','coke','charcoal','wood_log'], fluidIn:{ water:0.2 } },   // producer
+  // consumer: power:{ use:30000 }; T0/T1 fuel machines: burn:{ mjPerSec:0.05, fuels:[...] }
   types:['smelting'], speed:1, ocMax:2,
-  extract:{ hardnessMax:2, rate:0.5, fluids:false },   // extractors only
-  conveyor:{ rate:8 },                                 // conveyors only
-  storage:{ cap:600 },                                 // adds to per-item cap
-  nature:{ kind:'woodcutter', radius:5, rate:0.4, consumes:{water:0.05} },
-  turret:{ range:6, dmg:6, rate:1, dmgType:'kinetic', ap:false, ammo:{arrow:1}, ammoPerShot:1 },
-  wall:true, heatproof:false, light:{ radius:4, color:'#ffb060', intensity:0.8 },
-  shaft:{ layer:1 }, research:{ /* labs are ordinary machines running 'research' recipes */ },
+  extract:{ hardnessMax:2, rate:0.5, fluid:false },     // extractors (fluid:true → output goes to pipes)
+  conveyor:{ rate:8 }, cable:{ cap:300000 }, pipe:{ rate:8 }, overlay:'cable'|'pipe' (cables/pipes only),
+  tank:{ cap:2000, cryo:false }, storage:{ cap:600 }, elevator:{ rate:20 }, borer:{ rate:4 }, shaft:{ layer:1, rate:5 },
+  nature:{ kind:'woodcutter', radius:5, rate:0.4, consumes:{ water:0.05 } },
+  turret:{ range:6, dmg:6, rate:1, dmgType:'kinetic', ap:false, ammo:{ arrow:1 } },
+  wall:true, heatproof:false, light:{ radius:4, color:'#ffb060', intensity:0.8 }, lab:{ tier:0 },
+  surfaceOnly:false, needsWater:false /* must touch a water tile */, needsVent:false,
   desc:'...', lore:'...' }
 ```
 `cat` ∈ `core | logistics | storage | nature | extract | process | power | research | defense | special`.
-`size` ∈ 1|2|3 (square footprint, anchored at top-left tile `x,y`). `buildTime` seconds (2–60; hub instant).
-`hp` = integrity pool used by defense damage → integrity% = hpNow/hp. Sprites/sfx keys are the canonical ones in
-§9/§10. `tier` 0–7.
+`size` 1|2|3 square, anchored top-left; `rot` 0–3 stored per instance (aesthetic). `buildTime` 1–60 s. `hp` =
+integrity pool. `complexity` 1–5 drives particle/sound intensity.
 
 ### 5.4 Tech
 ```js
-{ id:'bronze_working', name:'Trabajo del bronce', era:1, requires:['stone_tools'], cost:{ rp0:40 },
-  unlocks:{ structures:['bronze_forge'], recipes:['alloy_bronze','...'] }, desc:'...', hint:'Funde cobre y estaño 9:1.' }
+{ id:'bronze_working', name:'Trabajo del bronce', era:1, requires:['stone_tools'], cost:{ rp0:40 }, time:90,
+  lab:0 /* min lab tier: 0 study_table, 1 lab_basic, 2 lab_industrial, 3 lab_quantum */,
+  unlocks:{ structures:['bronze_forge'], recipes:['alloy_bronze'] }, desc:'...', hint:'Funde cobre y estaño 9:1.' }
 ```
-Eras (0–7): `0 Edad de piedra, 1 Edad del bronce, 2 Era del vapor, 3 Era eléctrica, 4 Era industrial,
-5 Era avanzada, 6 Era nuclear, 7 Era cuántica`. Research points are items `rp0..rp5` (science tiers) produced by
-lab structures via `research` recipes; early techs may cost raw items instead. Paying the cost is instant.
-Everything (structure/recipe) is unlocked by exactly one tech, except the start set listed in `LD.Content.START`
-(`{structures:[...], recipes:[...]}` exported from techs.js).
+Eras 0–7 (`LD.U.ERA_NAMES`). `cost` items are paid from the **surface** inventory when research starts; `time`
+seconds of lab work; each powered lab of tier ≥ `lab` adds 1× speed (linear). Everything is unlocked by exactly
+one tech, except `LD.Content.START = { structures:[...], recipes:[...] }` (exported from techs.js).
 
 ### 5.5 Enemy
 ```js
-{ id:'wolf', name:'Lobo', layer:0, hp:30, speed:2.4, dmg:4, attackRate:1, armor:0, armorType:'none',
-  size:0.6, color:'#8a8378', color2:'#3a3733', sprite:'wolf', sfx:'growl', drops:{hide:1,bone:1},
-  threat:1, boss:false, desc:'...', night:true }
+{ id:'wolf', name:'Lobo', layer:0, hp:30, speed:2.4, dmg:4, attackRate:1, armor:0, armorType:'none', size:0.6,
+  color:'#8a8378', color2:'#3a3733', sprite:'wolf', sfx:'growl', drops:{hide:1,bone:1}, threat:1, boss:false,
+  night:true, desc:'...' }
 ```
-`armorType` ∈ `none | chitin | crystal | basalt | void`. Damage rule (defense.js): if turret `ap` → full damage;
-else `dmg = max(dmg*0.1, dmg - armor)`; then multiplied by type matrix
-`kinetic:{none:1,chitin:1,crystal:.5,basalt:.4,void:0}`, `thermal:{none:1,chitin:1.4,crystal:1.2,basalt:.6,void:0}`,
-`electric:{none:1.2,chitin:.8,crystal:1.5,basalt:.5,void:0}`, `plasma:{none:1,chitin:1,crystal:1,basalt:1,void:1}`.
-`void` armour only takes damage from `ap && (dmgType==='plasma' || dmgType==='thermal')`.
+`armorType` ∈ `none | chitin | crystal | basalt | void`. Damage rule in §7.7.
 
 ### 5.6 Layer & terrain
 ```js
-{ idx:0, id:'surface', name:'Superficie', w:160, h:120, chunk:16, startRadius:1 /* chunks around centre */,
-  ambient:0.95, tint:'#c9c9b8', heat:false, unlockedBy:null /* or shaft structure id */,
-  deposits:[{ res:'copper_ore', hardness:0, freq:0.0025, size:[4,9], amount:[1500,4000] }, ...],
-  enemies:['wolf','boar','bear'], waveBase:240, desc:'...' }
+{ idx:1, id:'caves', name:'Cuevas someras', w:128, h:96, chunk:16, ambient:0.35, tint:'#3b3a38', heat:false,
+  unlockedBy:'shaft_coal', borerTier:2, rockBase:1.0, rockPerChunk:0.35,
+  deposits:[{ res:'coal', hardness:1, freq:0.02, size:[5,14], amount:[3000,8000] }, ...],
+  enemies:['cave_bat','cave_spider','armored_mole'], waveBase:720, music:'caves', desc:'...' }
 ```
 Terrains (`LD.Content.terrains`): `{ id:'grass', name:'Pradera', layer:0, walkable:true, buildable:true,
-natural:{ item:'plant_fiber', rate:1 } /* manual gather */, color:'#6b7a4a' }`. Fixed terrain ids per layer:
-- L0: `grass, forest (tree tiles), dirt, sand, water, rock (stone outcrop, extract stone), clay, bog (peat), saltflat`
-- L1: `cave_floor, cave_wall, cave_water, coal_seam(deposit overlay), rubble`
+natural:{ item:'plant_fiber', rate:1 }, color:'#6b7a4a', rock:false }`. Fixed ids:
+- L0: `grass, forest, dirt, sand, water, rock, clay, bog, saltflat, gravel`
+- L1: `cave_floor, cave_wall (solid, unexcavated), cave_water, rubble, coal_seam`
 - L2: `deep_floor, deep_wall, crystal_floor, deep_water, rubble`
-- L3: `abyss_floor, abyss_wall, obsidian_floor, magma (not buildable), vent (geothermal)`
-- L4: `core_floor, core_wall, magma_sea (not buildable), plasma_floor, void_crack (enemy spawn)`
-Deposits are a separate layer (`layer.deposits` map) over buildable terrain; a deposit tile shows an ore overlay.
+- L3: `abyss_floor, abyss_wall, obsidian_floor, magma, vent`
+- L4: `core_floor, core_wall, magma_sea, plasma_floor, void_crack`
+Walls (`*_wall`) = solid rock inside unexcavated chunks; excavated chunks contain floors/water/rubble with some
+wall pillars. Deposits are an overlay (`G.layers[L].deposits`) on buildable terrain.
 
-## 6. Game state (LD.G) — serialised as JSON
+## 6. Game state (LD.G) — JSON-serialisable (see state.js `blank()`)
 
 ```js
-G = {
-  v:1, meta:{ name, created, playtime, difficulty:'normal', seed:12345, lastSave },
-  time:{ t:0 /* sim seconds */, day:1, dayFrac:0 /* 0..1, day length 600 s */ },
-  inv:{ itemId:number },                 // global inventory (floats; UI floors)
-  caps:{ base:200 },                     // per-item cap = base + Σ storage.cap of built storages (all layers)
-  discovered:{ items:{}, structures:{}, techs:{}, enemies:{}, layers:{}, recipes:{} },
-  research:{ done:{ techId:true } },
-  layers:[ { unlocked:true, claimed:{ 'cx,cy':true }, deposits:{ 'x,y':{res, amt, max} }, trees:{ 'x,y':growth0..1 },
-             threat:0, waveAt:900, waveNo:0 } ],   // terrain itself is regenerated from seed (World.gen)
-  structures:{ uid:{ uid, id, layer, x, y, hp, state, build:{ left, total }|null, oc:0, recipe:null, progress:0,
-                     paused:false, fuel:0 /* MJ buffered */, tank:0, stats:{ made:0 } } },
-  enemies:[ { uid, id, layer, x, y, hp, tx, ty, target:uid|null, cd:0 } ],
-  power:{ gen:0, use:0, ratio:1, stored:0, cap:0 },
-  stats:{ produced:{}, consumed:{}, kills:0, builds:0 },
-  log:[ { t, text, kind } ] (max 200),
-  view:{ layer:0, cam:{ x,y,z } per layer }
-}
+G = { v:2, meta:{ name, created, playtime, difficulty, seed, lastSave, era },
+  time:{ t, day, dayFrac },
+  inv:[ {itemId:n} ×5 ],            // per layer; fluids never here
+  caps:{ base:200 },                 // per-item cap per layer = base + Σ storage.cap in that layer
+  discovered:{ items:{}, structures:{}, techs:{}, enemies:{}, layers:{0:true}, recipes:{} },
+  research:{ done:{}, current:null|{ tech, left, total }, queue:[techId] },
+  layers:[ { unlocked, excavated:{'cx,cy':true}, digging:{'cx,cy':{ work, total }}, deposits:{'x,y':{res,amt,max,hardness,fluid}},
+             trees:{'x,y':growth}, threat, waveAt, waveNo, weather:{ kind, until }, energyHandled } ],
+  structures:{ uid:{ uid, id, layer, x, y, rot, hp, state, build:{left,total}|null, oc, recipe, progress, paused,
+                     fuel /*MJ*/, tank:{ fluid, amt }|null, rules:[{item,mode:'up'|'down',keep}] /*elevators*/, stats:{made} } },
+  enemies:[ { uid, id, layer, x, y, hp, path:[[x,y]...], pi, target, cd } ],
+  power:{ grids:[ { layer, gen, use, ratio, stored, cap } ] },
+  events:{ next:{ kind, layer, at }|null, active:[] },
+  stats:{ produced:{}, consumed:{}, kills, builds, dismantled, waves, hist:{ /* Stats module ring buffers */ } },
+  blueprints:[ { name, w, h, cells:[{dx,dy,id,rot}] } ],
+  objectives:{ done:{}, current:[] }, tutorial:{ step, done },
+  log:[], view:{ layer:0, cam:[] }, flags:{} }
 ```
-Structure `state` ∈ `building | idle | working | no_power | no_input | output_full | no_fuel | no_link | broken |
-paused`. Derived (not saved): `occ` grids, connectivity, link rates → `LD.Sim.Economy.rebuildNetworks()`.
+Structure `state` ∈ `building | idle | working | no_power | no_input | output_full | no_fuel | no_link | no_fluid |
+broken | paused`. Derived data (occ grids, networks, paths) is rebuilt on load (`LD.Sim.init`).
 
 ## 7. Simulation rules (binding numbers)
 
-- Fixed step `DT = 0.1 s`, `LD.Sim.tick(DT)` from an accumulator in Main; max 50 steps per frame; offline: on
-  load, elapsed real seconds (cap 8 h) simulated with `DT_OFFLINE = 5 s` steps at 60% efficiency (speed factor
-  0.6), no enemy waves during offline (threat still grows), summary emitted (`offline:summary`).
-- Order per tick: Nature → Economy (extractors, machines) → Power balance (applied next tick as `power.ratio`) →
-  Build → Research (nothing per tick; techs are instant) → Defense → Territory/threat → time/day.
-- **Power**: `gen` = Σ producers actually running (fuel/water available, integrity>0); `use` = Σ consumer demand of
-  machines that want to run; `ratio = min(1, (gen + storedAvailable)/use)`; all consumers run at `ratio` speed;
-  surplus charges batteries. Producers burning fuel consume `fuel MJ = P·dt / 1e6` from an internal buffer
-  refilled from inventory (item `fuel` MJ). Brownout when `ratio<1` (event, HUD warning). Power is one global
-  network across all layers connected through built shafts. T0 machines have no power; fuel machines use `burn`.
-- **Logistics**: a structure is *linked* if a 4-neighbour path of conveyor tiles connects it to the layer hub
-  (surface: `hub`; lower layers: `elevator`). Structures adjacent to the hub/elevator are linked directly. Each
-  linked structure's item throughput (in+out) is capped at `linkRate` = max rate of adjacent conveyor tiles
-  (directly adjacent to hub = unlimited). Elevator transfer capacity = Σ rates of conveyors adjacent to the
-  elevator; items produced in a lower layer are counted into the global inventory only up to that capacity
-  (excess production throttles machines in that layer: state `output_full`). Conveyors are not machines and have
-  no state; they can be damaged.
-- **Machines**: selected `recipe` runs when inputs available (consumed at start), progress += dt·speedMul;
-  on completion outputs added (if any output would exceed cap → wait `output_full`). `speedMul =
-  structure.speed · 1.5^oc · power.ratio · integrityMul · difficultyMul`. Consumers demand
-  `power.use · 2^oc` W only while `working`. **Overclock**: `oc ∈ [0, ocMax]`, raises effective tier by `oc`
-  (allows recipes of `tier ≤ tier+oc`), ×2 power per level, ×1.5 speed per level, ×3 wear per level.
-- **Integrity**: `hp` pool. Wear: working machines lose `0.004%·hp/s · 3^oc` (≈7 h to zero at oc0); in layer 4
-  non-heatproof structures lose an extra `0.05%/s`. `integrity = hp/maxHp`. If `integrity < 0.30`:
-  `integrityMul = max(0.1, 1 - 0.03·(30 - integrity·100))`. At `hp<=0`: `broken` (stops) until repaired.
-  Repair: cost = `ceil(cost_i · missingFraction · 0.5)` per material, instant. `maintenance_bay` auto-repairs
-  structures within radius 8 every 10 s if materials exist.
-- **Construction**: placing consumes full cost immediately; `build.left = buildTime·difficultyBuildMul`; while
-  building, dismantle refunds 100%; after completion, dismantle refunds `floor(0.65·cost_i)` per material
-  (guides say 65%). Build time by complexity: conveyor 1 s, T0 huts 3–5 s, steam engine 6 s, T3 machines 10–15 s,
-  T5 20–30 s, fission reactor 45 s, fusion reactor 60 s.
-- **Extractors**: placed with footprint over ≥1 deposit tile with `hardness ≤ extract.hardnessMax`; rate =
-  `extract.rate · tilesCovered · speedMul` items/s of the deposit resource; deposits deplete (amt) and the tile
-  becomes plain. `magma`, `helium3`, `deuterium_brine`, `vent` deposits are infinite (`amt:-1`).
-- **Nature**: trees (`forest` tiles with growth 0..1) regrow at `1/900 s` after being cut (tile → grass with a
-  sapling marker when a planter/tree_farm replants, or slowly by natural seeding from adjacent forest 1/1800 s).
-  Manual gather: click a natural tile with the hand tool: 1 item per 1.2 s cooldown (surface only, first hour).
-  `well/pump` produce water; `bonsai` produces wood from water without land.
-- **Research**: paying tech cost is instant; unlocking sets discovered flags; `hint` shown in encyclopedia.
-- **Territory**: chunks (16×16). Cost to claim chunk at Chebyshev distance `d` from centre on layer `L`:
-  `base[L]·(1.35^d)` in layer-specific materials (L0: wood_log+stone; L1: iron_plate+torch; L2: steel_plate+lamp;
-  L3: titanium_plate+circuit_advanced; L4: thermal_plate+carbide_tip). Must be adjacent to a claimed chunk.
-  Only claimed chunks are buildable; deposits everywhere are visible (dimmed outside territory).
-- **Defense**: per layer `threat` grows `+1/min · (1 + 0.02·structuresInLayer)` while the layer is unlocked and
-  has ≥1 structure. Waves at `waveAt` (base interval by layer; `waveBase` s ± 20%); wave size
-  `= 2 + floor(threat/8)`, composition from `layer.enemies` weighted by `threat` (bosses when
-  `waveNo % 5 === 4`). Spawn at random border tiles of the claimed area (surface: outside the claimed area; lower
-  layers: `void_crack`/rubble tiles or claimed border). Enemies move (tiles/s) toward the nearest structure
-  (walls are targeted when they block the straight path), attack every `1/attackRate` s dealing `dmg` to `hp`.
-  Turrets target the nearest enemy in `range` (tiles) and fire at `rate` shots/s consuming ammo (if any) from
-  inventory; they need power (`power.use`) when defined. Killed enemies add `drops` to inventory. Difficulty
-  multipliers: `peaceful: no waves; easy: hp×0.6 dmg×0.6 interval×1.5; normal ×1; hard hp×1.6 dmg×1.4
-  interval×0.75; brutal hp×2.5 dmg×2 interval×0.55`. Night on surface: `dayFrac in [0.55,1)` → wave size ×1.5.
-- **Caps**: per-item cap = `caps.base + Σ storage.cap`; production above cap is blocked (`output_full`).
+Fixed step `DT = 0.1 s`; `LD.Sim.tick(DT)` from Main's accumulator (max 50 steps/frame). Order: Events/weather →
+Nature → Economy (extractors, machines, borers, elevators) → Fluids → Power (ratio applied next tick) → Build
+(construction, wear) → Research → Defense → Stats → time/day. **No offline progress** (decision 24).
 
-## 8. Rendering & FX contract
+### 7.1 Inventory & caps
+Per layer. Machines/extractors/builders use `G.inv[layer]`. Per-item cap per layer = `caps.base + Σ storage.cap`
+of built storage structures in that layer. Production above cap blocks (`output_full`).
 
-- `LD.Render.init(canvas)`, `LD.Render.frame(dt, t)`, camera per layer `{x,y,z}` (world px = tile·32), zoom 0.5–3.
-  Terrain drawn from cached chunk canvases (`LD.Tex.chunkCanvas(layerIdx, cx, cy)` with invalidation
-  `LD.Tex.invalidate(layerIdx, x, y)`); tile size 32 px base at z=1; deposits overlay; trees; territory border
-  (dashed hairline bone) and unclaimed dim (`rgba(12,12,13,.55)`); structures via `LD.Sprites.draw(ctx, s, x, y,
-  size, t)`; build ghosts (valid = bone, invalid = vermilion, 50%); enemies; particles; lighting pass: low-res
-  light canvas (1/4 res) multiply-composited on layers with `ambient<1` and during night; light sources from
-  `structure.light` + working machines (tier glow) + magma/crystal terrain.
-- Day/night on surface: 600 s day; tint bone-warm at noon, cool ink-blue at night (`ambient` 1.0→0.35).
-- Particles: `LD.Particles.emit(kind, x, y, opts)` kinds: `smoke, steam, spark, dust, ember, glow, shot, hit,
-  death, build, rubble, rain, plasma, arc`. Settings `particles: 'off'|'low'|'high'`.
-- Structure state badge overlay (small monoline glyph top-right of sprite): `no_power ⚡, no_input ↓, output_full
-  ■, no_fuel ▲, broken ✕, building progress ring` — drawn as vector, not text glyphs.
+### 7.2 Logistics (conveyors) and elevators
+A structure is **linked** if a 4-neighbour path of conveyor tiles connects it to the layer hub (surface `hub`,
+lower layers any `elevator*`), or it is adjacent to the hub/elevator. `linkRate(uid)` = max conveyor rate among
+its adjacent conveyor tiles (∞ if adjacent to hub/elevator). Item throughput (in+out) of a linked structure is
+capped at `linkRate`. Unlinked machines: `no_link`. Conveyors/cables/pipes are structures with `overlay`
+(cables/pipes) or size 1 (conveyors); they have no state and can be damaged.
+**Elevators** (lower layers; the first is auto-placed at the layer centre when its shaft completes) transfer items
+between that layer and the surface at `elevator.rate` items/s total. Rules per elevator: default rule
+`{item:'*', mode:'up', keep:0}` (send everything up), plus user rules `{item, mode:'down', keep:N}` (bring from the
+surface until the layer holds N) and `{item, mode:'keep', keep:N}` (do not send up below N). Transfer is capped
+by both layers' caps. The surface shaft head is the counterpart; shafts also carry power and fluids (§7.3, §7.4).
+Hub at ≤10 % integrity → all hub-side throughput ×0.1 (decision 32).
 
-## 9. Sprite keys (LD.Sprites.draw(ctx, structureOrEnemy, px, py, sizePx, t, state))
+### 7.3 Power (cables, grids)
+Cables are tile overlays (`overlay:'cable'`) placeable on empty tiles and on conveyor tiles, not under other
+structures. A **grid** = connected component over cable tiles and structures (structures conduct; 4-neighbour).
+Each layer has independent grids; a shaft/elevator pair joins the grid touching the shaft head with the grid
+touching the elevator. A structure's power I/O is capped by the best adjacent cable `cap` (∞ if it touches a
+generator/consumer directly? No: structures conduct but *capacity* between two structures without cable = the
+lower of their tiers' default 50 kW·2^tier). Per grid: `gen`, `use`, `ratio = min(1,(gen+storedAvail)/use)`; all
+consumers on the grid run at `ratio`; surplus charges batteries on the grid. Fuel generators burn
+`P·dt/1e6 MJ` from an internal buffer refilled from the layer inventory (items) or pipes (fluid fuels).
+`power:{ gen }` with `fluidIn` (water) needs pipes. Brownout events per grid. `energyHandled` per layer =
+Σ gen actually produced (W) → threat driver (§7.7).
 
-Sprite keys (one per structure id unless shared): conveyors share `conveyor` (param tier), walls share `wall`
-(param tier), warehouses share `warehouse` (param tier), shafts share `shaft` (param tier), drills share `drill`
-(param tier). All others use their structure id as sprite key. Enemy sprite keys = enemy ids. Sprites must render
-crisply at 32/48/64/96 px per tile (size·32·zoom) and animate (`t`) when `state==='working'`. Style: top-down 3/4
-matte industrial, rivets/plates/pipes/gears drawn with vector ops + subtle noise, tier accent colour
-(`LD.Sprites.TIER_COLORS[tier]`).
+### 7.4 Fluids (pipes, tanks)
+Pipes are tile overlays (`overlay:'pipe'`, same placement rules as cables; cable and pipe may share a tile). A
+**fluid network** = connected component over pipe tiles + fluid-handling structures (tanks, pumps, wells, machines
+with fluid I/O, shafts/elevators). Tanks hold one fluid each (`inst.tank = {fluid, amt}`), `tank.cap` units;
+cryogenic fluids (`liquid_nitrogen, deuterium, tritium, helium3, cryo_coolant, liquid_hydrogen`) require
+`tank.cryo`. A machine pushes fluid outputs into tanks of that fluid (or empty tanks) on its network; pulls inputs
+from tanks of that fluid; throughput capped by the best adjacent pipe `rate`. No tank with room → `output_full`;
+no fluid → `no_fluid`. Pipes have no storage. Shaft↔elevator link joins networks across layers at `shaft.rate`.
+Lubricant: a machine whose network has lubricant consumes 0.005 units/s and gets wear ×(1/1.5).
 
-## 10. SFX keys (LD.Audio.loop(key, uid, intensity) / LD.Audio.play(name))
+### 7.5 Machines, overclock, integrity, construction
+- `speedMul = structure.speed · 1.5^oc · grid.ratio · integrityMul · difficultyMul`. Consumers demand
+  `power.use · 2^oc` only while `working`. `oc ∈ [0, ocMax]` raises effective tier by `oc`.
+- Wear: working machines lose `0.004 %·maxHp/s · 3^oc` (÷1.5 with lubricant); in layer 4 non-heatproof
+  structures lose `0.05 %/s` always. `integrity = hp/maxHp`; if `< 0.30`:
+  `integrityMul = max(0.1, 1 − 0.03·(30 − integrity·100))`; `hp ≤ 0` → `broken` until repaired.
+- Repair: cost `ceil(cost_i · missingFraction · 0.5)`, instant, from the layer inventory. `maintenance_bay`
+  repairs structures within radius 8 every 10 s if materials exist in that layer.
+- Construction: placing pays full cost from the layer inventory; `build.left = buildTime·difficultyBuildMul`.
+  Dismantle: 100 % refund while building, `floor(0.65·cost_i)` after. Blueprints: placing a blueprint creates
+  ghosts (`state:'planned'` entries are NOT structures; the UI queues placements and places each when affordable,
+  in order, one per 0.5 s).
+- Extractors: footprint must cover ≥1 deposit tile with `hardness ≤ extract.hardnessMax`; rate =
+  `extract.rate · tilesCovered · speedMul`; finite deposits deplete (tile becomes plain, chunk canvas invalidated);
+  infinite deposits `amt:-1`. Fluid deposits (crude_oil, natural_gas, deuterium_brine, helium3, magma) need
+  `extract.fluid:true` extractors and output to pipes.
 
-Machine loop keys: `furnace, kiln, forge, hammer, saw, mill, steam, boiler, crusher, press, lathe, wiremill,
-assembler, electric_hum, chemical, refinery, electrolyzer, centrifuge, compressor, arc, vacuum, enrichment, cryo,
-fabricator, nano, quantum, drill_hand, drill_steam, drill_electric, drill_laser, drill_plasma, pump, wheel,
-windmill, generator_diesel, turbine, reactor, fusion, lab, turret_charge, waterwheel, farm, bonsai`.
-One-shots: `ui_click, ui_hover, ui_open, ui_close, ui_tab, build_place, build_done, dismantle, repair, research,
-discover, wave_warning, wave_start, wave_end, brownout, integrity_low, structure_broken, claim, shot_arrow,
-shot_ballista, shot_cannon, shot_gatling, shot_laser, shot_tesla, shot_plasma, hit, enemy_die, growl, screech,
-crystal_chime, magma_roar, void_whisper, layer_switch, save, error`.
+### 7.6 Excavation (lower layers, decision 10)
+Lower-layer chunks start `excavated:false` (terrain = `*_wall`, undiggable visually hatched). Start set: the
+elevator chunk + its 4 orthogonal neighbours. Rock hardness of chunk at Chebyshev distance `d` from the centre
+chunk: `H = rockBase·(1 + rockPerChunk·d)`; `work = H · 256`. A **borer** (`borer.rate` tiles/s at speed 1, tier ≥
+layer `borerTier`; higher tier ×2 per tier above) placed adjacent (its footprint touching the chunk boundary) to
+an unexcavated chunk that is adjacent to an excavated one digs it: `digging[key].work += rate·speedMul·dt`; while
+digging it yields `stone 0.3/s, gravel 0.2/s` + the layer's common ore at 5 % into the layer inventory (linked),
+emits rubble particles. On completion: chunk excavated, terrain generated (floors, pillars, deposits revealed),
+event `chunk:excavated`, borer goes idle. Surface has no excavation: all chunks free (decision 10).
+
+### 7.7 Defense
+Threat per layer grows per minute: `0.3 + 1.2·log10(1 + energyHandled/1e3) + 0.01·structuresInLayer` (energy is
+the main driver, decision 37), only while unlocked with ≥1 structure. Waves: interval `waveBase` (L0 720 s, L1
+780, L2 840, L3 900, L4 960) ×difficulty ±20 %; size `2 + floor(threat/6)`; composition weighted by threat;
+boss when `waveNo % 5 === 4`. Night on L0: size ×1.5. Spawn: L0 at map border tiles (or `spawnTiles`); lower
+layers at `void_crack`/`rubble`/border-of-excavated tiles. **Path-finding** (decision 35): A* on tiles (walls,
+structures, water = blocked; unexcavated rock blocked) from spawn to hub/elevator; recompute when structures
+change (dirty flag per layer, max 1 recompute per enemy per 2 s); if no path: target the wall/structure with the
+lowest hp on the straight line to the hub and attack it ("brecha"). Enemies attack any structure within 0.8 tiles
+of their path when blocked, else walk (`speed` tiles/s). Damage rule: turret `ap` → full; else
+`dmg = max(dmg·0.1, dmg − armor)`; × type matrix `kinetic:{none:1,chitin:1,crystal:.5,basalt:.4,void:0}`,
+`thermal:{none:1,chitin:1.4,crystal:1.2,basalt:.6,void:0}`, `electric:{none:1.2,chitin:.8,crystal:1.5,basalt:.5,void:0}`,
+`plasma:{all:1}`; `void` armour only from `ap && (plasma|thermal)`. Turrets: nearest enemy in `range`, `rate`
+shots/s, ammo from the layer inventory, need grid power when `power.use`. Kills add `drops`. Difficulty
+multipliers as in `LD.State.DIFFICULTIES`. Hub never below 10 % hp.
+
+### 7.8 Nature, day/night, weather, events
+Day 600 s; `dayFrac ∈ [0.55,1)` = night (ambient 0.35). Trees regrow 1/900 s; planters/tree farms replant.
+Manual gather (hand tool, surface): 1 item / 1.2 s cooldown. Weather (L0): `clear 55 %, fog 15 %, rain 20 %,
+storm 10 %`, 3–8 min each, announced 30 s before: rain → wells/pumps ×1.5, solar ×0.3; storm → windmill ×1.6,
+solar ×0.3, tiny integrity loss on windmills; fog → ambient ×0.8, turret range −1. Events (announced 60 s
+before, `event:*`): `earthquake` (L1–L4: 3–8 % hp loss to random structures, spawns rubble, may reveal a vein),
+`plasma_storm` (L4: heat loss ×3 for 90 s), `migration` (L0: wave ×2.5), `vein` (new finite deposit appears in an
+excavated/any chunk). Frequency: one event per 12–25 min.
+
+### 7.9 Research
+`Research.start(techId)` pays cost from `inv[0]`, sets `current={tech,left:time,total:time}`; each tick
+`left −= dt · Σ(labs of tier ≥ tech.lab that are powered and linked) · grid.ratio`; on 0 → done, unlocks,
+discovers, `tech:researched`, era update, next in queue starts if affordable. Labs show `working` while a
+tech is active. Era 0 techs use `study_table` (no power).
+
+### 7.10 Territory
+Surface: everything buildable (no claiming). Lower layers: only excavated chunks buildable. `World.isBuildable`
+enforces both. Deposits: finite in chunks with `d ≤ maxD−2`, infinite (`amt:-1`) in the outer ring (L0: border
+ring; lower layers: `d ≥ maxD−1`).
+
+## 8. Rendering & FX
+
+- `TILE = 48` px at zoom 1 (decision 48). Zoom 0.5–3. Camera per layer persisted in `G.view.cam[L]`.
+- Terrain from cached chunk canvases (`LD.Tex.chunkCanvas(L,cx,cy,bucket)`) with invalidation; unexcavated chunks
+  drawn as solid rock with a diagonal hatch and hardness label on hover; digging chunks show a progress ring.
+- Overlays drawn in order: terrain → deposits → trees → pipes → cables → conveyors → structures (sorted by y)
+  → enemies → projectiles → particles → lighting (multiply, low-res light canvas 1/4) → weather (rain/fog) →
+  UI overlays (grid, hover, ghost, ranges, selection, chunk borders, blueprint frame).
+- Structures rotate by `rot` (sprites drawn rotated 90°·rot). State badges as vector glyphs (§8 of API).
+- Day/night tint on L0; ambient per layer; light sources: `structure.light`, working machines (tier glow),
+  crystal/magma/plasma terrain, turret shots.
+- Particles kinds: `smoke, steam, spark, dust, ember, glow, shot, hit, death, build, rubble, rain, plasma, arc,
+  fog, bubble`. Settings `particles: off|low|high`.
+
+## 9. Sprite keys → see docs/CANON.md §A (column `sprite`). Shared parametric keys: `conveyor, cable, pipe, tank,
+wall, warehouse, shaft, drill, elevator, borer` (param = tier). Enemy keys = enemy ids.
+
+## 10. SFX keys → docs/CANON.md §F. Music: `LD.Music.menu()` 133 BPM minimal pulse; `LD.Music.layer(idx)`
+subtle per-stratum bed (decision 7): L0 soft pads/wind, L1 low drone + drips, L2 crystal tones, L3 sub-bass +
+heat, L4 void drone with slow pulses; crossfade 3 s on layer switch; ducks under wave warnings.
 
 ## 11. UI screens & flows
 
-- `menu` (KDZ background running) → `NUEVA PARTIDA` (name, difficulty, seed) | `CONTINUAR` (slots list with
-  playtime/era/day) | `ENCICLOPEDIA` (global discoveries union of slots? No: last played save) | `AJUSTES` |
-  `CUESTIONARIO` (opens `cuestionario.html` if present, else hidden).
-- `game`: HUD (§hud.js): top bar (era, day/hour, power gen/use + ratio bar, threat/next wave, research points),
-  left: strata widget (vertical 5-band section with shaft depth, locked bands hatched, click to switch layer),
-  left dock: build palette toggle; bottom: inventory tray (grouped by cat, tooltips with rates ±/s); right:
-  selection panel. Keys: `WASD/arrows` pan, wheel zoom, `1–5` layer, `B` build, `E` encyclopedia, `R` research
-  tab, `X` dismantle mode, `Esc` pause/cancel, `Space` pause sim, `H` hand tool.
-- Pause (`Esc`): CONTINUAR / GUARDAR (slot picker) / ENCICLOPEDIA / AJUSTES / SALIR AL MENÚ (confirm if unsaved).
-- Encyclopedia: categories Materiales, Componentes, Máquinas, Tecnologías (tree by era, with "Siguiente paso"
-  panel listing affordable/near techs and what's missing), Capas, Amenazas, Mecánicas (guides). Undiscovered:
-  `???` with a hint sentence. Entry shows: icon/sprite, stats, recipes producing/consuming, unlocked by, where found.
-- Settings: dificultad (only at new game; shown read-only in game), volumen general/música/efectos/ambiente,
-  partículas, calidad de textura, mostrar rejilla, mostrar rangos, autoguardado (1/3/5/10 min/off), movimiento
-  reducido (disables menu animation motion), idioma (es only, disabled), reiniciar tutorial.
-- Onboarding: first minutes show 6 short objective cards (recoger 20 palos y 20 piedras → mesa de trabajo → …).
+- Menu (KDZ background) with left ink slab: lockup + `NUEVA PARTIDA` (name, difficulty, seed) / `CONTINUAR`
+  (slots: auto, 1, 2, 3 with playtime/era/day) / `ENCICLOPEDIA` (last save) / `AJUSTES` / `CUESTIONARIO` (link to
+  ./cuestionario.html, hidden if not present) / version block "DWG NO. KDZ-DUSTRY REV A".
+- Game HUD: top bar (era, day + clock, weather, power of current layer grids: gen/use with ratio bar, threat +
+  next wave countdown, research in progress with bar); left: strata section widget (5 bands, shaft depth,
+  hatched locked, excavated % for lower layers) = layer control; left dock: BUILD (B), BLUEPRINTS, HAND (H),
+  DISMANTLE (X), STATS; bottom: inventory tray of the current layer grouped by cat with rates and caps; right:
+  selection panel. Keys: WASD/arrows pan, wheel zoom, 1–5 layer, B build, E encyclopedia, T tech tree, X
+  dismantle, H hand, R rotate (build mode) / research tab otherwise, C copy selection (blueprint), V paste,
+  Esc close/cancel/pause, Space pause sim, F3 fps.
+- Build palette: categories (Logística, Energía, Fluidos, Extracción, Procesado, Naturaleza, Defensa,
+  Investigación, Almacén, Especial), locked items greyed with unlocking tech; cost list coloured by availability
+  in the current layer; drag to draw lines for conveyors/cables/pipes; rotate with R.
+- Panel: structure info, state, recipe picker (filtered by effective tier) + "aplicar a todas", progress, OC
+  controls (+/− with power/speed/wear preview), integrity bar + repair, fuel/fluid gauges, elevator rules editor,
+  tank contents, borer target, turret ammo/target, pause, dismantle (refund preview), rotate.
+- Encyclopedia (dark): Materiales, Fluidos, Componentes, Máquinas, Tecnologías (tree by era + queue + "Siguiente
+  paso"), Capas, Amenazas, Mecánicas (guides). Undiscovered = `???` + hint.
+- Tutorial (decision 43): 8 steps with highlight of the relevant UI, skippable; objectives list (10–15
+  milestones) in a collapsible HUD card.
+- Stats (decision 44): canvas line charts (last 10/60 min) of item production/consumption per layer and power.
+- Pause (Esc): CONTINUAR / GUARDAR / CARGAR / ENCICLOPEDIA / AJUSTES / SALIR AL MENÚ.
+- Settings: volumes (general/música/efectos/ambiente), partículas, textura, rejilla, rangos siempre, autoguardado,
+  movimiento reducido, mostrar FPS, reiniciar tutorial; dificultad read-only in game.
 
 ## 12. Balance targets
-
-- Era 0→1 in ~10 min, →2 in 40 min, →3 in 2 h, →4 in 5 h, →5 in 10 h, →6 in 18 h, →7 in 30 h of active play
-  (offline progress at 60%). Costs scale ~×4–8 per era; production rates ×3–5 per tier of machine.
-- Fuel energy (MJ/unit): wood_log 8, stick 1, charcoal 16, peat 10, coal 24, coke 30, tar 20, ethanol 22,
-  biofuel 34, diesel 42, kerosene 40, naphtha 38, natural_gas 36, hydrogen 12, fuel_rod 4e5 (fission only),
-  mox_rod 5e5, thorium_fuel 3e5, fusion_pellet 6e6, he3_pellet 9e6.
-- Generator outputs: water_wheel 4 kW, windmill 2.5 kW, steam_engine 60 kW, coal_plant 400 kW, diesel 1.5 MW,
-  gas_turbine 3 MW, solar 80 kW (day), geothermal 5 MW, fission 150 MW, fusion 2 GW.
-- Typical consumer draw: T2 15–30 kW, T3 20–60 kW, T4 100–300 kW, T5 0.5–1.5 MW, T6 1–3 MW, T7 25–60 MW.
+Era 0→1 ≈10 min, →2 40 min, →3 2 h, →4 5 h, →5 10 h, →6 18 h, →7 30 h active. Fuel MJ/unit: wood_log 8, stick 1,
+charcoal 16, peat 10, coal 24, coke 30, tar 20, ethanol 22, biofuel 34, diesel 42, kerosene 40, naphtha 38,
+natural_gas 36, hydrogen 12, fuel_rod 4e5, mox_rod 5e5, thorium_fuel 3e5, fusion_pellet 6e6, he3_pellet 9e6.
+Generators: water_wheel 4 kW, windmill 2.5 kW, steam_engine 60 kW, coal_plant 400 kW, diesel 1.5 MW, gas_turbine
+3 MW, solar 80 kW, geothermal 5 MW, fission 150 MW, fusion 2 GW. Consumers: T2 15–30 kW, T3 20–60 kW, T4
+100–300 kW, T5 0.5–1.5 MW, T6 1–3 MW, T7 25–60 MW. Cable caps: drive_shaft 10 kW, cable_copper 300 kW, cable_hv
+20 MW, cable_super ∞. Pipe rates: wood 2, bronze 8, steel 40, titanium 200, quantum ∞. Tank caps: wood 300, iron
+2000, steel 10000, titanium 60000, cryo 30000, quantum 2e6. Elevators: 5 / 20 / 80 / 400 items/s. Borers: 2 / 4 /
+10 / 30 tiles/s.
 
 ## 13. Testing & acceptance
-
-- `node tools/validate.js` must pass: every recipe input/output item exists; every item is obtainable (deposit,
-  nature, drop, or recipe output) and (except final products) used somewhere; every structure cost item is
-  obtainable at or below its tier; every structure/recipe unlocked by exactly one tech or START; tech graph
-  acyclic and all reachable from START; ≥60 raw materials, ≥100 components with recipes; every recipe type has
-  ≥1 structure; every sprite/sfx key in the canon lists; fuel items have `fuel>0`.
-- `node tools/smoke.mjs`: loads dist, zero console errors, new game, 600 sim seconds via `LD.Debug.ff(600)`,
-  place structures via `LD.Debug`, screenshots.
-- `LD.Debug` (sim.js): `ff(seconds)`, `give(itemId, n)`, `giveAll(n)`, `unlockAll()`, `place(id, layer, x, y)`,
-  `spawnWave(layer)`, `setThreat(layer, v)`, `state()`.
+`node tools/validate.js` passes (see file for rules incl. fluids need pipe/tank paths, every fluid has a tank tier
+≤ its tier+1, every recipe type has a machine, tech graph acyclic and fully reachable). `node tools/smoke.mjs`:
+zero console errors, new game, `LD.Debug.ff(600)`, placements, screenshots. `LD.Debug`: `ff, give(L,id,n),
+giveAll(n), unlockAll(), unlockLayer(L), excavateAll(L), place(id,L,x,y,rot), spawnWave(L), setThreat(L,v),
+state(), tp(L,x,y), fluid(L, id, n)`.
