@@ -1409,7 +1409,7 @@ function gallery() {
   const cols = 10, cell = 128, states = ['working', 'idle', 'no_power', 'no_input', 'output_full', 'no_fuel', 'no_fluid', 'no_link', 'broken', 'paused'];
   const cv = U.canvas(cols * cell, Math.ceil(defs.length / cols) * cell + 1000), g = cv.getContext('2d');
   cv.style.display = 'block'; cv.style.maxWidth = '100%';
-  root.appendChild(U.el('div', { style: { marginBottom: '8px' } }, 'KDZDUSTRY SPRITE TEST — ' + defs.length + ' structures, ' + enemies.length + ' enemies, badges, overlays, lockup'));
+  root.appendChild(U.el('div', { style: { marginBottom: '8px' } }, 'KDZDUSTRY · PRUEBA DE SPRITES — ' + defs.length + ' estructuras, ' + enemies.length + ' enemigos, insignias, superposiciones, logotipo'));
   root.appendChild(cv); document.body.appendChild(root);
   const insts = defs.map((d, i) => ({ uid: 'g' + i, id: d.id, x: i % cols, y: (i / cols) | 0, rot: 0, hp: 100, maxHp: 100, state: 'working', oc: 0, tank: { fluid: 'water', amt: 60 } }));
   const t0 = performance.now();
@@ -1420,27 +1420,27 @@ function gallery() {
     g.fillStyle = '#0c0c0d'; g.fillRect(0, 0, cv.width, cv.height);
     defs.forEach((d, i) => { const x = (i % cols) * cell + 10, y = ((i / cols) | 0) * cell + 4, inst = insts[i]; inst.rot = 0; inst.state = 'working'; g.fillStyle = '#141416'; g.fillRect(x - 2, y - 2, 100, 100); S.draw(g, d, x + (96 - Math.min(96, d.size * 32)) / 2 * 0, y, 96, t, inst); label(d.id.slice(0, 22), x, y + 108, BONE2); label('T' + d.tier + ' ' + d.size + '×' + d.size + ' ' + (d.sprite || ''), x, y + 118, BONE4); });
     let y = Math.ceil(defs.length / cols) * cell + 10, x = 10;
-    label('STATES / INTEGRITY / OVERCLOCK / BUILDING / GHOST', x, y - 2); y += 6;
+    label('ESTADOS / INTEGRIDAD / OVERCLOCK / CONSTRUCCIÓN / FANTASMA', x, y - 2); y += 6;
     const demo = defs.find(d => d.id === 'steam_engine') || defs[0];
     states.forEach((st, i) => { const inst = { uid: 's' + i, id: demo.id, x: i, y: 0, rot: i & 3, hp: 100, maxHp: 100, state: st, oc: 0 }; S.draw(g, demo, x + i * 100, y, 72, t, inst); S.drawBadge(g, st, x + i * 100, y, 72, 0.5); label(st, x + i * 100, y + 84); });
     y += 96;
     const variants = [{ hp: 100, state: 'working' }, { hp: 40, state: 'working' }, { hp: 0, state: 'broken' }, { oc: 1, state: 'working' }, { oc: 3, state: 'working' }, { state: 'building', build: { left: (1 - ((t * 0.15) % 1)) * 10, total: 10 } }];
     variants.forEach((v, i) => { const inst = Object.assign({ uid: 'v' + i, id: demo.id, x: i, y: 1, rot: 0, hp: 100, maxHp: 100, oc: 0 }, v); S.draw(g, demo, x + i * 100, y, 72, t, inst); label(v.state + (v.oc ? ' oc' + v.oc : '') + (v.hp !== undefined ? ' hp' + v.hp : ''), x + i * 100, y + 84); });
-    S.drawGhost(g, demo, x + 600, y, 72, true, 1); label('ghost ok', x + 600, y + 84); S.drawGhost(g, demo, x + 700, y, 72, false, 2); label('ghost bad', x + 700, y + 84);
-    const big = defs.find(d => d.id === 'fusion_reactor'); if (big) { S.draw(g, big, x + 820, y, 144, t, { uid: 'big', id: big.id, x: 0, y: 0, rot: 0, hp: 100, maxHp: 100, state: 'working', oc: 0 }); label('fusion 144px', x + 820, y + 156); }
-    const hubd = defs.find(d => d.id === 'hub'); if (hubd) { S.draw(g, hubd, x + 990, y, 144, t, { uid: 'hub', id: 'hub', x: 0, y: 0, rot: 0, hp: 100, maxHp: 100, state: 'idle', oc: 0 }); S.draw(g, hubd, x + 1150, y, 48, t, null); S.draw(g, demo, x + 1150, y + 60, 24, t, { uid: 'sm', id: demo.id, x: 0, y: 0, rot: 0, hp: 100, maxHp: 100, state: 'working', oc: 0 }); label('hub 144 / 48 / demo 24', x + 990, y + 156); }
+    S.drawGhost(g, demo, x + 600, y, 72, true, 1); label('fantasma válido', x + 600, y + 84); S.drawGhost(g, demo, x + 700, y, 72, false, 2); label('fantasma inválido', x + 700, y + 84);
+    const big = defs.find(d => d.id === 'fusion_reactor'); if (big) { S.draw(g, big, x + 820, y, 144, t, { uid: 'big', id: big.id, x: 0, y: 0, rot: 0, hp: 100, maxHp: 100, state: 'working', oc: 0 }); label('fusión 144 px', x + 820, y + 156); }
+    const hubd = defs.find(d => d.id === 'hub'); if (hubd) { S.draw(g, hubd, x + 990, y, 144, t, { uid: 'hub', id: 'hub', x: 0, y: 0, rot: 0, hp: 100, maxHp: 100, state: 'idle', oc: 0 }); S.draw(g, hubd, x + 1150, y, 48, t, null); S.draw(g, demo, x + 1150, y + 60, 24, t, { uid: 'sm', id: demo.id, x: 0, y: 0, rot: 0, hp: 100, maxHp: 100, state: 'working', oc: 0 }); label('almacén 144 / 48 · demo 24', x + 990, y + 156); }
     y += 170;
-    label('OVERLAYS: straight / corner / T / cross per tier', x, y - 2); y += 6;
+    label('SUPERPOSICIONES: recta / esquina / T / cruz por nivel', x, y - 2); y += 6;
     const masks = [10, 6, 14, 15, 5], ovs = defs.filter(d => overlayKind(d));
     ovs.forEach((d, i) => { masks.forEach((m, j) => { const nb = { n: !!(m & 1), e: !!(m & 2), s: !!(m & 4), w: !!(m & 8) }; S.drawOverlay(g, d, x + i * 56 + j * 0, y + j * 0, 48, t, { uid: 'o' + i + j, id: d.id, x: i, y: j, rot: 0 }, j === 0 ? nb : null); }); });
     ovs.forEach((d, i) => { masks.forEach((m, j) => { const nb = { n: !!(m & 1), e: !!(m & 2), s: !!(m & 4), w: !!(m & 8) }; S.drawOverlay(g, d, x + i * 56, y + 52 + j * 52, 48, t, { uid: 'o' + i + j, id: d.id, x: i, y: j, rot: 0 }, nb); }); label(d.id.slice(0, 12), x + i * 56, y + 52 * 6 + 8); });
     y += 52 * 6 + 20;
-    label('ENEMIES at 40px and 96px (walk cycle, facing rotates)', x, y - 2); y += 6;
+    label('ENEMIGOS a 40 px y 96 px (ciclo de marcha, orientación giratoria)', x, y - 2); y += 6;
     enemies.forEach((e, i) => { const inst = { uid: 'e' + i, id: e.id, x: 0, y: 0, dir: t * 0.6 + i }; S.drawEnemy(g, e, x + i * 100, y, 40, t, inst); S.drawEnemy(g, e, x + i * 100, y + 44, 96, t, null); label(e.id.slice(0, 14), x + i * 100, y + 150); });
     y += 160;
-    label('LOCKUP (t-reveal loops every 4 s)', x, y - 2); y += 6;
+    label('LOGOTIPO (trazado progresivo cada 4 s)', x, y - 2); y += 6;
     g.strokeStyle = BONE; S.lockup(g, x, y + 100, 100, t % 4); g.strokeStyle = VERM; S.lockup(g, x + 10, y + 150, 30, null);
-    label('cache ' + S.cacheSize() + ' canvases · ' + fps.toFixed(0) + ' fps', x, y + 175);
+    label('caché ' + S.cacheSize() + ' lienzos · ' + (S.cacheBytes() / 1048576).toFixed(0) + ' MB · ' + fps.toFixed(0) + ' fps', x, y + 175);
     acc += 1; if (frames % 30 === 0) { fps = 30 / ((performance.now() - t0) / 1000 - lastT); lastT = (performance.now() - t0) / 1000; }
     requestAnimationFrame(frame);
   };

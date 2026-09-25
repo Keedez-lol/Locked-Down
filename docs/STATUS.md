@@ -11,7 +11,7 @@ Rama: `claude/exciting-tesla-vgb2ey`. Todo lo listado como "hecho" está en `src
 - Motor: `gen/textures.js`, `gen/world.js`, `sim/economy.js`, `sim/sim.js`, `sim/fluids.js`, `sim/power.js`, `sim/build.js`, `sim/research.js`, `sim/nature.js`, `sim/events.js`, `sim/stats.js`, `sim/defense.js`, `render/render.js`, `render/particles.js`, `audio/audio.js`, `audio/music.js`.
 - Interfaz: `ui/ui.js`, `ui/menu.js`, `ui/settings.js`, `ui/pause.js`, `ui/hud.js`, `ui/build.js`, `ui/panel.js`, `ui/encyclopedia.js`, `ui/tutorial.js`, `ui/stats.js` y CSS `10_menu`, `20_hud`, `30_panels`, `40_encyclopedia`, `50_overlays`.
 - Contenido: `content/items.js` (282 objetos), `content/recipes.js` (299 recetas).
-- `gen/sprites.js`: escrito por su agente (142 KB, parsea) — **revisar si está completo** (galería `?spritetest`).
+- `gen/sprites.js`: completo (todas las claves del canon, 15 enemigos, lockup, galería `?spritetest`).
 - Cuestionario `cuestionario.html` (publicado como artefacto) y `README.md`.
 
 ## Pendiente (en este orden)
