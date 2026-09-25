@@ -291,7 +291,7 @@ const STREAM_CAP = [4096, 1536, 12288];
 const prim = new Float32Array((STREAM_CAP[0] + STREAM_CAP[1] + STREAM_CAP[2]) * STRIDE);
 const streams = STREAM_CAP.map((cap, i) => ({
   base: STREAM_CAP.slice(0, i).reduce((a, b) => a + b, 0), cap, count: 0, runs: 0,
-  runStart: new Int32Array(MAX_RUNS), runKnock: new Uint8Array(MAX_RUNS)
+  runStart: new Int32Array(MAX_RUNS), runKnock: new Uint8Array(MAX_RUNS), runTextured: new Uint8Array(MAX_RUNS)
 }));
 const CUT = { none: 0, keepLeft: 1, keepRight: 2 };
 const pen = { layer: LAYER.letters, under: false, knock: 0, ink: 1, verm: 0, tone: 0, alpha: 1, x0: -1e5, y0: -1e5, x1: 1e5, y1: 1e5, cut: CUT.none, s: 1, tx: 0, ty: 0, textured: 0, seed: 0, seedBase: 0 };
@@ -306,9 +306,9 @@ const scratch = new Float64Array(7);
 function emitPrimitive(target, knock, kind) {
   const st = streams[target];
   if (st.count >= st.cap || pen.alpha <= 0.004 || pen.x1 <= pen.x0 || pen.y1 <= pen.y0) return;
-  if (st.runs === 0 || st.runKnock[st.runs - 1] !== knock) {
+  if (st.runs === 0 || st.runKnock[st.runs - 1] !== knock || st.runTextured[st.runs - 1] !== pen.textured) {
     if (st.runs >= MAX_RUNS) return;
-    st.runStart[st.runs] = st.count; st.runKnock[st.runs] = knock; st.runs++;
+    st.runStart[st.runs] = st.count; st.runKnock[st.runs] = knock; st.runTextured[st.runs] = pen.textured; st.runs++;
   }
   const o = (st.base + st.count++) * STRIDE;
   prim[o] = scratch[0]; prim[o + 1] = scratch[1]; prim[o + 2] = scratch[2]; prim[o + 3] = scratch[3];
@@ -977,7 +977,7 @@ function drawTinyLockup(weight, neighbours) {
   paintInk(LAYER.letters, neighbours);
   drawGlyph(GK, TINY.kx, TINY.base, TINY.s, 1, weight, true); drawGlyph(GZ, TINY.zx, TINY.base, TINY.s, 1, weight, true);
 }
-const growIn = tau => easeInOutSine(clamp(tau / 0.8)), fadeOut = tau => 1 - easeInOutSine(clamp(tau / 0.5));
+const growIn = tau => easeInOutSine(clamp(tau / 0.8)), fadeOut = tau => 1 - easeInOutSine(clamp(tau / 0.35));
 function composeTiny(t, fade) {
   const cx = W / 2, cy = H / 2, p = easeSettle(progress(t, beatAt(BEATS.tiny), beatAt(BEATS.tiny) + 0.3));
   const gapX = TINY.w / 2 + 24, gapY = SCALE_TINY / 2 + 24;
@@ -1166,6 +1166,8 @@ function compose(t) {
   else if (t < CUE.act3) composeTriptych(t);
   else if (t < CUE.act4) composeActIII(t);
   else composeActIV(t);
+  const steady = (1 - fx.halftone) * (1 - fx.halftone);
+  fx.blurA *= steady; fx.blurBx *= steady; fx.blurBy *= steady;
   clearCamera();
   pen.cut = exiting ? CUT.keepLeft : CUT.none;
   composeNumeral(t, cycle);
@@ -1222,7 +1224,8 @@ void main() {
   vec2 ndc = screen / vec2(1920., 1080.);
   gl_Position = vec4(ndc.x * 2. - 1., 1. - ndc.y * 2., 0., 1.);
 }`;
-const FS_PRIM = `#version 300 es
+const FS_PRIM = textured => `#version 300 es
+${textured ? '#define TEXTURED' : ''}
 precision highp float;
 flat in vec4 vGeom; flat in vec4 vParam; flat in vec4 vPaint; flat in vec4 vClip; flat in float vCut; flat in float vTexture;
 in vec2 vPos; in float vScreenX;
@@ -1231,6 +1234,7 @@ out vec4 o;
 const float TAU = 6.28318531, PEN = ${PEN_HW}.;
 float sdSegment(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-8), 0., 1.); return length(pa - ba * h); }
 float stroke(float d, float hw) { float he = max(hw, .5 * uPx); return clamp((he - d) / uPx + .5, 0., 1.) * hw / he; }
+#ifdef TEXTURED
 float hash(vec2 p) { vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 vec2 gradient(vec2 i) { float a = hash(i) * TAU; return vec2(cos(a), sin(a)); }
 float noise(vec2 p) {
@@ -1253,30 +1257,37 @@ float inkDensity(vec2 st, float axis, float fp, vec2 sd) {
   float density = .968 + .03 * mottle + .06 * streaks - .22 * voids;
   return clamp(mix(density, 1., (1. - smoothstep(.8, 4., PEN - axis)) * .85), .6, 1.);
 }
+#endif
 void main() {
   float kind = floor(mod(vParam.w, 256.) / 16. + .001), cov, tone = 1., density = 1.;
+#ifdef TEXTURED
   bool textured = vTexture > .5 && kind < 1.5;
   float fu = PEN / max(vParam.z, 1e-5), fp = uPx * fu;
   vec2 sd = vec2(vTexture * 17.13, vTexture * 5.71);
+#endif
   if (kind < .5) {
     float d = sdSegment(vPos, vGeom.xy, vGeom.zw);
+#ifdef TEXTURED
     if (textured) {
       vec2 ab = vGeom.zw - vGeom.xy, u = length(ab) > 1e-5 ? normalize(ab) : vec2(1., 0.), rel = vPos - vGeom.xy;
       vec2 st = vec2(dot(rel, u), dot(rel, vec2(-u.y, u.x))) * fu;
       density = inkDensity(st, d * fu, fp, sd);
       d -= edgeGrain(st, sd) / fu;
     }
+#endif
     cov = stroke(d, vParam.z);
   } else if (kind < 1.5) {
     vec2 q = vPos - vGeom.xy; float a = atan(q.y, q.x), sweep = mod(a - vParam.x, TAU), d;
     if (vParam.x + sweep <= vParam.y) d = abs(length(q) - vGeom.z);
     else d = min(length(q - vGeom.z * vec2(cos(vParam.x), sin(vParam.x))), length(q - vGeom.z * vec2(cos(vParam.y), sin(vParam.y))));
+#ifdef TEXTURED
     if (textured) {
       float span = vParam.y - vParam.x;
       vec2 st = vec2((sweep > span + .5 * (TAU - span) ? sweep - TAU : sweep) * vGeom.z, length(q) - vGeom.z) * fu;
       density = inkDensity(st, d * fu, fp, sd);
       d -= edgeGrain(st, sd) / fu;
     }
+#endif
     cov = stroke(d, vParam.z);
   } else {
     vec2 c = (vGeom.xy + vGeom.zw) * .5, h = (vGeom.zw - vGeom.xy) * .5, q = abs(vPos - c) - h;
@@ -1323,7 +1334,7 @@ uniform sampler2D uScene, uPaper;
 uniform vec2 uPaperOffset;
 uniform vec3 uPaperCam, uPanelCam[3];
 uniform vec4 uPanelRect[3];
-uniform float uCell, uInverted, uInvertX, uPx;
+uniform float uCell, uInverted, uInvertX, uPx, uLoupeOn;
 uniform vec3 uInk, uBone, uVerm;
 in vec2 vUv;
 out vec4 o;
@@ -1341,10 +1352,13 @@ void main() {
   vec2 q = (p - uPaperOffset - cam.yz) / cam.x / ${PAPER_TILE}.;
   vec4 n1 = texture(uPaper, q);
   vec4 n2 = texture(uPaper, mat2(.8, .6, -.6, .8) * q * 1.37 + .31);
-  float loupe = clamp((cam.x - 1.) * .5, 0., 1.);
-  vec4 n3 = texture(uPaper, mat2(.6, -.8, .8, .6) * q * 5.3 + .17), n4 = texture(uPaper, q * 12.9 + .61);
-  float tooth = (n1.r - .5) + .7 * (n2.b - .5) + loupe * (.8 * (n3.r - .5) + .6 * (n4.b - .5));
-  float fibre = max(max(n1.g, .8 * n2.g), loupe * .75 * n3.g);
+  float tooth = (n1.r - .5) + .7 * (n2.b - .5), fibre = max(n1.g, .8 * n2.g);
+  if (uLoupeOn > .5) {
+    float loupe = clamp((cam.x - 1.) * .5, 0., 1.);
+    vec4 n3 = texture(uPaper, mat2(.6, -.8, .8, .6) * q * 5.3 + .17), n4 = texture(uPaper, q * 12.9 + .61);
+    tooth += loupe * (.8 * (n3.r - .5) + .6 * (n4.b - .5));
+    fibre = max(fibre, loupe * .75 * n3.g);
+  }
   float formation = (n1.a + n2.a) * .5 - .5;
   vec3 bone = uBone * (1. + .045 * tooth - .02 * fibre + .045 * formation);
   vec3 inkStock = uInk * (1. + .45 * tooth + .5 * formation) + .006 * fibre;
@@ -1363,13 +1377,11 @@ uniform float uK, uCA, uLoupe;
 uniform vec2 uSize;
 uniform vec3 uBlur;
 uniform vec4 uExempt;
+uniform vec3 uWeights[12];
 uniform int uTaps, uBlurTaps;
+uniform float uMotion;
 in vec2 vUv;
 out vec4 o;
-vec3 spectrum(float u) {
-  float g = (u - .47) / .24;
-  return vec3(smoothstep(.3, .8, u) * (1. - .25 * smoothstep(.83, 1., u)), exp(-g * g), 1. - smoothstep(.12, .55, u));
-}
 void main() {
   vec2 d = vUv - .5, a = d * vec2(1.77777778, 1.), e = abs(d);
   float r2 = dot(a, a) / 1.0401235;
@@ -1377,23 +1389,28 @@ void main() {
   float field = (1. - smoothstep(.43, .445, max(e.x, e.y))) * (1. - inLo.x * inLo.y * inHi.x * inHi.y);
   float base = (1. + uK * r2) / (1. + uK), spread = (uCA + uLoupe * field) * r2 * r2;
   float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
-  vec2 v = (vec2(vUv.x, 1. - vUv.y) * vec2(1920., 1080.) * uBlur.x + uBlur.yz) * field;
-  vec2 blur = vec2(v.x / 1920., -v.y / 1080.);
+  vec3 c = vec3(0.);
+  vec2 v = uMotion > .5 ? (vec2(vUv.x, 1. - vUv.y) * vec2(1920., 1080.) * uBlur.x + uBlur.yz) * field : vec2(0.);
   float blurPx = length(v) * uSize.x / 1920.;
-  bool moving = blurPx > .5;
-  vec3 c;
-  if (!moving && spread * length(d * uSize) < .5) c = texture(uImage, .5 + d * base).rgb;
-  else {
-    int taps = moving ? uBlurTaps : uTaps;
-    float ft = float(taps), jitter = moving ? n : 0., shuffle = fract(n * 7.31 + .37);
-    vec3 acc = vec3(0.), weight = vec3(0.);
+  if (blurPx > 1.) {
+    vec2 blur = vec2(v.x / 1920., -v.y / 1080.);
+    float ft = float(uBlurTaps), shuffle = fract(n * 7.31 + .37), neutral = clamp(blurPx * .25, 0., 1.);
+    vec3 weight = vec3(0.);
     for (int i = 0; i < 16; i++) {
-      if (i >= taps) break;
-      float fi = float(i), u = moving ? (fi + jitter) / ft : fi / (ft - 1.), b = (mod(fi * 5., ft) + shuffle) / ft - .5;
-      vec3 w = mix(spectrum(u), vec3(1.), clamp(blurPx * .25, 0., 1.));
-      acc += texture(uImage, .5 + d * (base + spread * (2. * u - 1.)) + blur * b).rgb * w; weight += w;
+      if (i >= uBlurTaps) break;
+      float fi = float(i), u = (fi + n) / ft, b = (mod(fi * 5., ft) + shuffle) / ft - .5;
+      vec3 w = mix(uWeights[int(u * 6. + .5)], vec3(1. / 7.), neutral);
+      c += texture(uImage, .5 + d * (base + spread * (2. * u - 1.)) + blur * b).rgb * w; weight += w;
     }
-    c = acc / weight;
+    c /= weight;
+  } else if (spread * length(d * uSize) < .5) c = texture(uImage, .5 + d * base).rgb;
+  else {
+    float last = float(uTaps - 1);
+    int first = uTaps == 7 ? 0 : 7;
+    for (int i = 0; i < 7; i++) {
+      if (i >= uTaps) break;
+      c += texture(uImage, .5 + d * (base + spread * (2. * float(i) / last - 1.))).rgb * uWeights[first + i];
+    }
   }
   o = vec4(c + (n - .5) / 255., 1.);
 }`;
@@ -1403,6 +1420,17 @@ const canvas = document.getElementById('kdz');
 const view = { dpr: 1, cw: 1, ch: 1, sx: 0, sy: 0, sw: 1, sh: 1, fw: 0, fh: 0, scale: 1, cssX: 0, cssY: 0, cssW: 1, cssH: 1, dirty: true };
 const offsets = new Float32Array(16);
 const LENS_TAPS_FULL = 7, LENS_TAPS_REDUCED = 5, BLUR_TAPS_FULL = 16, BLUR_TAPS_REDUCED = 9, LENS_FULL_SCALE = 0.9;
+const SPECTRAL_WEIGHTS = (() => {
+  const curves = [[0, 0, 0.04, 0.18, 0.55, 1, 0.8], [0, 0.25, 0.8, 1, 0.7, 0.2, 0], [0.75, 1, 0.6, 0.15, 0, 0, 0]];
+  const out = new Float32Array(3 * (LENS_TAPS_FULL + LENS_TAPS_REDUCED));
+  const sample = (curve, u) => { const f = u * (LENS_TAPS_FULL - 1), i = Math.min(LENS_TAPS_FULL - 2, Math.floor(f)); return mix(curve[i], curve[i + 1], f - i); };
+  const fill = (taps, first) => curves.forEach((curve, c) => {
+    const w = Array.from({ length: taps }, (_, i) => sample(curve, i / (taps - 1))), sum = w.reduce((x, y) => x + y);
+    w.forEach((v, i) => { out[(first + i) * 3 + c] = v / sum; });
+  });
+  fill(LENS_TAPS_FULL, 0); fill(LENS_TAPS_REDUCED, LENS_TAPS_FULL);
+  return out;
+})();
 let gl = null, renderer = null;
 const timer = { ext: null, queries: [], busy: new Uint8Array(4), head: 0, gpuMs: 0, at: -1e9 };
 
@@ -1452,9 +1480,10 @@ function initGL() {
   gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
   if (!gl) return false;
   renderer = {
-    prim: program(VS_PRIM, FS_PRIM, 'primitive', ['uOffset', 'uPx', 'uKnock', 'uCutX']),
-    print: program(VS_FULL, FS_PRINT, 'print', ['uScene', 'uPaper', 'uPaperOffset', 'uPaperCam', 'uPanelRect', 'uPanelCam', 'uCell', 'uInverted', 'uInvertX', 'uPx', 'uInk', 'uBone', 'uVerm']),
-    lens: program(VS_FULL, FS_LENS, 'lens', ['uImage', 'uK', 'uCA', 'uLoupe', 'uSize', 'uBlur', 'uTaps', 'uBlurTaps', 'uExempt']),
+    prim: program(VS_PRIM, FS_PRIM(false), 'primitive', ['uOffset', 'uPx', 'uKnock', 'uCutX']),
+    primInk: program(VS_PRIM, FS_PRIM(true), 'primitive.ink', ['uOffset', 'uPx', 'uKnock', 'uCutX']),
+    print: program(VS_FULL, FS_PRINT, 'print', ['uScene', 'uPaper', 'uPaperOffset', 'uPaperCam', 'uPanelRect', 'uPanelCam', 'uCell', 'uInverted', 'uInvertX', 'uPx', 'uLoupeOn', 'uInk', 'uBone', 'uVerm']),
+    lens: program(VS_FULL, FS_LENS, 'lens', ['uImage', 'uK', 'uCA', 'uLoupe', 'uSize', 'uBlur', 'uMotion', 'uWeights', 'uTaps', 'uBlurTaps', 'uExempt']),
     bake: program(VS_FULL, FS_BAKE, 'paper', []),
     primVao: gl.createVertexArray(), emptyVao: gl.createVertexArray(), instances: gl.createBuffer(),
     scene: null, printed: null, paper: null
@@ -1473,7 +1502,7 @@ function initGL() {
   gl.uniform1i(renderer.print.u.uScene, 0); gl.uniform1i(renderer.print.u.uPaper, 1);
   gl.uniform3fv(renderer.print.u.uInk, INK); gl.uniform3fv(renderer.print.u.uBone, BONE); gl.uniform3fv(renderer.print.u.uVerm, VERMILION);
   gl.useProgram(renderer.lens.p);
-  gl.uniform1i(renderer.lens.u.uImage, 0);
+  gl.uniform1i(renderer.lens.u.uImage, 0); gl.uniform3fv(renderer.lens.u.uWeights, SPECTRAL_WEIGHTS);
   gl.uniform1f(renderer.lens.u.uK, LENS.k); gl.uniform1f(renderer.lens.u.uCA, LENS.ca);
   gl.uniform4f(renderer.lens.u.uExempt, colL(11) / W, 1 - rowB(0) / H, CONTENT.x1 / W, 1 - CONTENT.y0 / H);
   timer.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
@@ -1529,11 +1558,15 @@ function timerPoll() {
 }
 
 function render() {
-  const px = H / view.fh, primProgram = renderer.prim;
+  const px = H / view.fh;
   gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.scene.fbo); gl.viewport(0, 0, view.fw, view.fh);
   gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.useProgram(primProgram.p);
-  gl.uniform2fv(primProgram.u.uOffset, offsets); gl.uniform1f(primProgram.u.uPx, px); gl.uniform1f(primProgram.u.uCutX, fx.cutX);
+  for (let k = 0; k < 2; k++) {
+    const pr = k ? renderer.primInk : renderer.prim;
+    gl.useProgram(pr.p);
+    gl.uniform2fv(pr.u.uOffset, offsets); gl.uniform1f(pr.u.uPx, px); gl.uniform1f(pr.u.uCutX, fx.cutX);
+  }
+  let active = renderer.primInk;
   gl.bindVertexArray(renderer.primVao); gl.bindBuffer(gl.ARRAY_BUFFER, renderer.instances);
   for (let i = 0; i < 3; i++) {
     const st = streams[i];
@@ -1544,7 +1577,9 @@ function render() {
     const st = streams[i];
     for (let r = 0; r < st.runs; r++) {
       const first = st.base + st.runStart[r], end = st.base + (r + 1 < st.runs ? st.runStart[r + 1] : st.count);
-      gl.blendEquation(st.runKnock[r] ? gl.MIN : gl.MAX); gl.uniform1f(primProgram.u.uKnock, st.runKnock[r]);
+      const pr = st.runTextured[r] ? renderer.primInk : renderer.prim;
+      if (pr !== active) { gl.useProgram(pr.p); active = pr; }
+      gl.blendEquation(st.runKnock[r] ? gl.MIN : gl.MAX); gl.uniform1f(pr.u.uKnock, st.runKnock[r]);
       for (let a = 1; a <= 4; a++) gl.vertexAttribPointer(a, 4, gl.FLOAT, false, STRIDE * 4, first * STRIDE * 4 + (a - 1) * 16);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, end - first);
     }
@@ -1558,6 +1593,7 @@ function render() {
   gl.uniform2f(renderer.print.u.uPaperOffset, offsets[0], offsets[1]); gl.uniform1f(renderer.print.u.uCell, fx.cell);
   gl.uniform1f(renderer.print.u.uInverted, fx.inverted); gl.uniform1f(renderer.print.u.uInvertX, fx.invertX); gl.uniform1f(renderer.print.u.uPx, px);
   gl.uniform3fv(renderer.print.u.uPaperCam, paperCamera); gl.uniform4fv(renderer.print.u.uPanelRect, panelRects); gl.uniform3fv(renderer.print.u.uPanelCam, panelCameras);
+  gl.uniform1f(renderer.print.u.uLoupeOn, paperCamera[0] > 1.001 || panelRects[2] > panelRects[0] || panelRects[6] > panelRects[4] || panelRects[10] > panelRects[8] ? 1 : 0);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.cw, view.ch); gl.clearColor(INK[0], INK[1], INK[2], 1); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -1568,6 +1604,7 @@ function render() {
   const full = view.scale >= LENS_FULL_SCALE;
   gl.uniform1i(renderer.lens.u.uTaps, full ? LENS_TAPS_FULL : LENS_TAPS_REDUCED); gl.uniform1i(renderer.lens.u.uBlurTaps, full ? BLUR_TAPS_FULL : BLUR_TAPS_REDUCED);
   gl.uniform3f(renderer.lens.u.uBlur, fx.blurA, fx.blurBx, fx.blurBy);
+  gl.uniform1f(renderer.lens.u.uMotion, fx.blurA !== 0 || fx.blurBx !== 0 || fx.blurBy !== 0 ? 1 : 0);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
