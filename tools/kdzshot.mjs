@@ -1,0 +1,10 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1500, height: 820 } });
+const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+await p.goto('file://' + process.cwd() + '/tools/out/kdztest.html');
+await p.waitForTimeout(2500);
+const info = await p.evaluate(() => ({ frame: k.frame, ready: k.ready, running: k.running() }));
+await p.screenshot({ path: 'tools/out/kdz.png' });
+console.log(info, errs);
+await b.close();

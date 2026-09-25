@@ -1,0 +1,1841 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0c0c0d">
+<meta name="color-scheme" content="dark">
+<title>KDZ</title>
+<style>
+html,body{margin:0;width:100%;height:100%;background:#0c0c0d;overflow:hidden;overscroll-behavior:none}
+body{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none;background:#0c0c0d}
+#hint{position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);display:none;margin:0;padding:7px 10px;border:1px solid rgba(236,231,220,.32);color:rgba(236,231,220,.72);font:500 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;white-space:nowrap;pointer-events:none}
+#fallback{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:28px;color:#ece7dc;font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;text-align:center}
+#fallback svg{width:min(76vw,880px);height:auto;display:block}
+</style>
+</head>
+<body>
+<canvas id="kdz" role="img" aria-label="KDZ. Kinetic typography: monoline stencil capitals K, D and Z constructed on a Swiss modular grid, looping."></canvas>
+<p id="hint">TAP TO ENABLE MOTION</p>
+<div id="fallback" role="img" aria-label="KDZ monoline stencil lockup, static"></div>
+<noscript><p style="position:fixed;inset:0;margin:0;display:flex;align-items:center;justify-content:center;color:#ece7dc;font:10px ui-monospace,Menlo,monospace;letter-spacing:.16em">KDZ &mdash; STENCIL MONOLINE &mdash; ENABLE JAVASCRIPT AND WEBGL2</p></noscript>
+<script>
+(() => {
+'use strict';
+
+/* ── config ─────────────────────────────────────────────── */
+const W = 1920, H = 1080, DURATION = 20, TAU = Math.PI * 2, RAD = Math.PI / 180;
+const rgb = hex => [(hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255];
+const INK = rgb(0x0c0c0d), BONE = rgb(0xece7dc), VERMILION = rgb(0xe8401c);
+const GRID = { x: 108, y: 72, col: 120, colStep: 144, row: 136, rowStep: 160 };
+const colL = i => GRID.x + i * GRID.colStep;
+const colR = i => colL(i) + GRID.col;
+const rowT = j => GRID.y + j * GRID.rowStep;
+const rowB = j => rowT(j) + GRID.row;
+const CONTENT = { x0: GRID.x, y0: GRID.y, x1: W - GRID.x, y1: H - GRID.y };
+const LAYER = { paper: 0, grid: 1, construction: 2, letters: 3, meta: 4, marks: 5, plate2: 6, fixed: 7 };
+const LAYER_DEPTH = [3, 5, 8, 9, 10, 14, 9, 0];
+const PARALLAX_Y = 0.7, SPRING_OMEGA = 6.5;
+const TEXT_PAD = 6, TEXT_INSET = 8, REVEAL_WINDOW = 0.14, STATIC = -1e9;
+const PAPER_TILE = 256;
+const MISREGISTER = [9, -6], REG_OMEGA = 36, REG_ZETA = 0.42;
+const LENS = { k: 0.008, ca: 0.0015, loupe: 0.0029 };
+const SCALE_MIN = 0.6, PIXEL_BUDGET = 4.2e6;
+const BREATH = { alpha: 0.32, depth: 0.12 }, CURSOR_ALPHA = 0.75;
+
+/* ── geometry: hero capitals (1000 units cap, y up, round pen 40, stencil gap 60) ── */
+const PEN_HW = 20, GAP = 60, OVERSHOOT = 10, CLEAR = GAP + 2 * PEN_HW;
+const partLine = (x0, y0, x1, y1, break0 = 0, break1 = 0) => ({ arc: false, x0, y0, x1, y1, len: Math.hypot(x1 - x0, y1 - y0), break0, break1 });
+const partArc = (cx, cy, r, a0, sweep) => ({ arc: true, cx, cy, r, a0, sweep, len: Math.abs(sweep) * r });
+function makeGlyph(strokes) {
+  let len = 0, lo = Infinity, hi = -Infinity;
+  const parts = strokes.flat();
+  for (const p of parts) {
+    len += p.len;
+    if (p.arc) for (let i = 0; i <= 64; i++) { const x = p.cx + p.r * Math.cos(p.a0 + p.sweep * i / 64); lo = Math.min(lo, x); hi = Math.max(hi, x); }
+    else { lo = Math.min(lo, p.x0, p.x1); hi = Math.max(hi, p.x0, p.x1); }
+  }
+  return { parts, len, x0: lo - PEN_HW, x1: hi + PEN_HW, w: Math.round(hi - lo + 2 * PEN_HW), cx: (lo + hi) / 2 };
+}
+const unit = (x, y) => { const l = Math.hypot(x, y); return [x / l, y / l]; };
+
+const K = (() => {
+  const join = [0, 390], top = [640, 1000], foot = [660, 0], branchAt = 0.38;
+  const arm = unit(top[0] - join[0], top[1] - join[1]);
+  const armStart = [join[0] + arm[0] * CLEAR / arm[0], join[1] + arm[1] * CLEAR / arm[0]];
+  const branch = [join[0] + (top[0] - join[0]) * branchAt, join[1] + (top[1] - join[1]) * branchAt];
+  const leg = unit(foot[0] - branch[0], foot[1] - branch[1]);
+  const legTrim = CLEAR / Math.abs(arm[0] * leg[1] - arm[1] * leg[0]);
+  const legStart = [branch[0] + leg[0] * legTrim, branch[1] + leg[1] * legTrim];
+  const normal = [arm[1], -arm[0]];
+  return {
+    join, top, foot, branchAt, branch, arm, armStart, legStart, normal,
+    armAngle: Math.atan2(arm[1], arm[0]) / RAD, legAngle: Math.atan2(-leg[1], leg[0]) / RAD,
+    glyph: makeGlyph([[partLine(0, 0, 0, 1000)], [partLine(armStart[0], armStart[1], top[0], top[1], 1 / arm[0])], [partLine(legStart[0], legStart[1], foot[0], foot[1], legTrim / CLEAR)]])
+  };
+})();
+const D = (() => {
+  const bowlX = 220, r = 500 + OVERSHOOT, barX = Math.sqrt(CLEAR * CLEAR - OVERSHOOT * OVERSHOOT);
+  return {
+    bowlX, r, barX,
+    glyph: makeGlyph([[partLine(0, 0, 0, 1000)], [partLine(barX, 500 + r, bowlX, 500 + r, CLEAR / barX), partArc(bowlX, 500, r, Math.PI / 2, -Math.PI), partLine(bowlX, 500 - r, barX, 500 - r, 0, CLEAR / barX)]])
+  };
+})();
+const Z = (() => {
+  const topBar = 560, baseBar = 580, slope = 0.55;
+  const diagTop = [topBar - slope * CLEAR, 1000 - CLEAR], diagFoot = [topBar - slope * (1000 - CLEAR), CLEAR];
+  const footX = topBar - slope * 1000;
+  return {
+    topBar, baseBar, diagTop, footX, angle: Math.atan2(1, slope) / RAD,
+    glyph: makeGlyph([[partLine(0, 1000, topBar, 1000)], [partLine(diagTop[0], diagTop[1], diagFoot[0], diagFoot[1], Math.hypot(1, slope), Math.hypot(1, slope))], [partLine(0, 0, baseBar, 0)]])
+  };
+})();
+const GK = K.glyph, GD = D.glyph, GZ = Z.glyph, GLYPHS = [GK, GD, GZ];
+GLYPHS.forEach((g, i) => { g.id = i; });
+
+const LOCKUP = (() => {
+  const s = (rowB(3) - rowT(1)) / 1000, kernKD = -8, kernDZ = -130;
+  const spacing = Math.round(((colR(7) - colL(0)) / s - (GK.w + GD.w + GZ.w) - kernKD - kernDZ) / 2);
+  const kx = colL(0) - GK.x0 * s;
+  const dx = kx + (GK.x1 + spacing + kernKD - GD.x0) * s;
+  const zx = dx + (GD.x1 + spacing + kernDZ - GZ.x0) * s;
+  return { s, kernKD, kernDZ, spacing, spaceKD: spacing + kernKD, spaceDZ: spacing + kernDZ, kx, dx, zx, cap: rowT(1), base: rowB(3), capStage: Math.round((rowB(3) - rowT(1))) };
+})();
+const LOCKUP_FONT_W = GK.w + LOCKUP.spaceKD + GD.w + LOCKUP.spaceDZ + GZ.w;
+const SLAB = { pad: 8, y0: rowB(0), y1: rowT(4) };
+const GIANT_D_SCALE = (CONTENT.y1 - CONTENT.y0 - 32) / (1000 + 2 * (OVERSHOOT + PEN_HW));
+const GIANT_K = { scale: 1.4, x: 520, y: 1260 };
+
+/* ── type: technical lettering on a 4 × 6 grid, drawn with the hero stroke primitive ── */
+const FONT_SRC = {
+  A: '0,0 2,6 4,0|0.67,2 3.33,2', B: '0,0 0,6 3,6 4,5 4,4 3,3 0,3|3,3 4,2 4,1 3,0 0,0', C: '4,5 3,6 1,6 0,5 0,1 1,0 3,0 4,1',
+  D: '0,0 0,6 3,6 4,5 4,1 3,0 0,0', E: '4,6 0,6 0,0 4,0|0,3 3,3', F: '4,6 0,6 0,0|0,3 3,3',
+  G: '4,5 3,6 1,6 0,5 0,1 1,0 3,0 4,1 4,3 2,3', H: '0,0 0,6|4,0 4,6|0,3 4,3', I: '2,0 2,6|1,6 3,6|1,0 3,0',
+  J: '4,6 4,1 3,0 1,0 0,1', K: '0,0 0,6|4,6 0,2|1.33,3.33 4,0', L: '0,6 0,0 4,0', M: '0,0 0,6 2,3 4,6 4,0',
+  N: '0,0 0,6 4,0 4,6', O: '1,0 0,1 0,5 1,6 3,6 4,5 4,1 3,0 1,0', P: '0,0 0,6 3,6 4,5 4,4 3,3 0,3',
+  Q: '1,0 0,1 0,5 1,6 3,6 4,5 4,1 3,0 1,0|2.5,1.5 4,0', R: '0,0 0,6 3,6 4,5 4,4 3,3 0,3|2,3 4,0',
+  S: '4,5 3,6 1,6 0,5 0,4 1,3 3,3 4,2 4,1 3,0 1,0 0,1', T: '0,6 4,6|2,6 2,0', U: '0,6 0,1 1,0 3,0 4,1 4,6',
+  V: '0,6 2,0 4,6', W: '0,6 1,0 2,4 3,0 4,6', X: '0,0 4,6|0,6 4,0', Y: '0,6 2,3 4,6|2,3 2,0', Z: '0,6 4,6 0,0 4,0',
+  0: '1,0 0,1 0,5 1,6 3,6 4,5 4,1 3,0 1,0|1,1.5 3,4.5', 1: '1,5 2,6 2,0|1,0 3,0', 2: '0,5 1,6 3,6 4,5 4,4 0,0 4,0',
+  3: '0,5 1,6 3,6 4,5 4,4 3,3 1.5,3|3,3 4,2 4,1 3,0 1,0 0,1', 4: '3,0 3,6 0,2 4,2',
+  5: '4,6 0,6 0,3.5 3,3.5 4,2.5 4,1 3,0 1,0 0,1', 6: '4,5 3,6 1,6 0,5 0,1 1,0 3,0 4,1 4,2.5 3,3.5 0,3.5',
+  7: '0,6 4,6 1.5,0', 8: '1,3 0,4 0,5 1,6 3,6 4,5 4,4 3,3 1,3 0,2 0,1 1,0 3,0 4,1 4,2 3,3',
+  9: '0,1 1,0 3,0 4,1 4,5 3,6 1,6 0,5 0,3.5 1,2.5 4,2.5',
+  '.': '2,0 2,0.35', ',': '2,0.35 1.4,-1', ':': '2,0 2,0.35|2,3.5 2,3.85', '/': '0.5,0 3.5,6', '-': '1,3 3,3',
+  '+': '0.4,3 3.6,3|2,1.4 2,4.6', '=': '0.8,2.2 3.2,2.2|0.8,3.8 3.2,3.8', '×': '0.9,1.9 3.1,4.1|0.9,4.1 3.1,1.9',
+  '°': '1.5,6 2.5,6 3,5.5 3,4.5 2.5,4 1.5,4 1,4.5 1,5.5 1.5,6', "'": '2,6 2,4.6', '!': '2,6 2,1.8|2,0 2,0.35',
+  '#': '1.2,0 1.6,6|2.6,0 3,6|0.2,2 3.9,2|0.1,4 3.8,4', '(': '2.8,6 1.6,4.8 1.6,1.2 2.8,0', ')': '1.2,6 2.4,4.8 2.4,1.2 1.2,0',
+  '<': '3.2,5 0.8,3 3.2,1', '>': '0.8,5 3.2,3 0.8,1', '|': '2,-1 2,7'
+};
+const FONT = new Array(256);
+for (const ch in FONT_SRC) FONT[ch.charCodeAt(0)] = FONT_SRC[ch].split('|').map(pl => Float32Array.from(pl.trim().split(/[ ,]+/).map(Number)));
+const NARROW = new Uint8Array(256), NUMERIC = new Uint8Array(256), DIGIT = new Uint8Array(256), DECIMAL = new Uint8Array(256);
+for (const ch of '.,:I') NARROW[ch.charCodeAt(0)] = 1;
+for (const ch of '0123456789.,:°+-') NUMERIC[ch.charCodeAt(0)] = 1;
+for (const ch of '0123456789') DIGIT[ch.charCodeAt(0)] = 1;
+for (const ch of '.,:') DECIMAL[ch.charCodeAt(0)] = 1;
+const DISPLAY_SIZE = 24, TIGHT_SIZE = 12;
+const SCRAMBLE = Uint8Array.from(Array.from('ABDEHKMNRSXZ', c => c.charCodeAt(0)));
+const POW10 = [1, 10, 100, 1000, 10000, 100000];
+const textWeight = size => 0.45 + size * 0.025;
+const codeAt = (src, i) => typeof src === 'string' ? src.charCodeAt(i) : src[i];
+function advance(src, i, len, size) {
+  const code = codeAt(src, i);
+  if (size >= DISPLAY_SIZE) return NARROW[code] ? 0.5 : 1;
+  return size >= TIGHT_SIZE && DECIMAL[code] && i > 0 && i + 1 < len && DIGIT[codeAt(src, i - 1)] && DIGIT[codeAt(src, i + 1)] ? 0.5 : 1;
+}
+function textWidth(src, len, size) {
+  if (len <= 0) return 0;
+  let cells = 0;
+  for (let i = 0; i < len; i++) cells += advance(src, i, len, size);
+  return cells * size - (advance(src, len - 1, len, size) < 1 ? size / 4 : size / 3);
+}
+
+/* ── cues & easing ──────────────────────────────────────── */
+const BEAT = 0.45;
+const BEATS = { push1: 2, giantD: 3, pull1: 4, tiny: 5, push2: 6, giantK: 7, pull2: 8, hit: 9, converge: 11, count: 12 };
+const CUE = (() => {
+  const act2 = 3.2, detailIn = act2 + 1.15, dBand = detailIn + 1.5, triptych = dBand + 2.35, act3 = triptych + 1.6;
+  const act4 = act3 + BEATS.count * BEAT, lead = DURATION - 0.3, exit = lead - 0.6;
+  return {
+    gridCols: lead - DURATION - 0.02, gridRows: 0.15, gridDraw: 0.85, gridTicks: 0.6, gutterCrosses: 1.35, colIndex: 0.35, rowIndex: 0.6,
+    construct1: 1.25, spec1: 1.9,
+    act2, kSlab: act2, kPlot: act2, slabGrow: 0.3, kPositive: act2 + 0.65, kReveal: 0.34, kDims: act2 + 0.8,
+    detailIn, detailArrive: detailIn + 0.7, detailOut: detailIn + 1.15, detailBack: detailIn + 1.75,
+    dBand, dTrail: dBand + 0.46, dDims: dBand + 0.65,
+    zDraw: dBand + 1.15, zDims: dBand + 1.7, chain2: dBand + 1.8,
+    triptych, panelLead: 1 / 60, panelStagger: 0.07, panelOpen: 0.38, panelTab: 0.1, panelPush: 1.1, panelClose: 0.3, panelCloseStagger: 0.06,
+    triptychOut: act3 - 0.42,
+    act3, rowStagger: 0.04, rowEntry: 0.3, rowsCut: act3 + BEATS.converge * BEAT, rowsWipe: 0.34,
+    act4, lockupReveal: 0.5, act4Construct: act4, act4Dims: act4 + 0.45,
+    kDims4: act4 + 0.45, zDims4: act4 + 0.55, chain4: act4 + 0.6, titleBlock: act4 + 0.7, values: act4 + 0.8, notes: act4 + 0.9, gap4: act4 + 1.0,
+    breathe: act4 + 1.45, breathPeriod: 2.4, cursor: act4 + 1.65, cursorEnd: act4 + 3.25, cursorFade: 0.25,
+    exit, exitEnd: lead, lead, idleStill: exit - 0.05
+  };
+})();
+const beatAt = n => CUE.act3 + n * BEAT;
+
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const progress = (t, a, b) => clamp((t - a) / (b - a));
+const mix = (a, b, x) => a + (b - a) * x;
+const easeOutExpo = x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
+const easeInOutExpo = x => x <= 0 ? 0 : x >= 1 ? 1 : x < 0.5 ? Math.pow(2, 20 * x - 10) / 2 : (2 - Math.pow(2, -20 * x + 10)) / 2;
+const easeInOutSine = x => 0.5 - 0.5 * Math.cos(Math.PI * clamp(x));
+const EASE_STEPS = 2048;
+function cubicBezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const table = new Float64Array(EASE_STEPS + 1);
+  for (let k = 0; k <= EASE_STEPS; k++) {
+    const x = k / EASE_STEPS;
+    let lo = 0, hi = 1, u = x;
+    for (let i = 0; i < 32; i++) {
+      const v = ((ax * u + bx) * u + cx) * u - x;
+      if (Math.abs(v) < 1e-9) break;
+      if (v < 0) lo = u; else hi = u;
+      const d = (3 * ax * u + 2 * bx) * u + cx, next = u - v / d;
+      u = d > 1e-6 && next > lo && next < hi ? next : (lo + hi) / 2;
+    }
+    table[k] = ((ay * u + by) * u + cy) * u;
+  }
+  table[EASE_STEPS] = 1;
+  return x => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    const f = x * EASE_STEPS, i = f | 0;
+    return table[i] + (table[i + 1] - table[i]) * (f - i);
+  };
+}
+const easeSettle = cubicBezier(0.16, 1, 0.3, 1);
+const easePlot = cubicBezier(0.25, 0.5, 0.3, 1);
+const easeCamera = cubicBezier(0.62, 0.02, 0.12, 1);
+const easeWipe = cubicBezier(0.65, 0, 0.35, 1);
+function dampedSpring(x, omega, zeta) {
+  if (x <= 0) return 0;
+  const wd = omega * Math.sqrt(1 - zeta * zeta);
+  return 1 - Math.exp(-zeta * omega * x) * (Math.cos(wd * x) + zeta * omega / wd * Math.sin(wd * x));
+}
+
+/* ── copy (every string is built once) ──────────────────── */
+const fixed1 = v => v.toFixed(1);
+const ARM_DEG = fixed1(K.armAngle) + '°', LEG_DEG = fixed1(K.legAngle) + '°', Z_DEG = fixed1(Z.angle) + '°';
+const SCALE_TINY = 24, TINY_WEIGHT = 1.6, TINY_RATIO = Math.round(LOCKUP.capStage / SCALE_TINY);
+const DETAIL_ZOOM = 3.5, PANEL_ZOOM = 3;
+const HEADER = [
+  { at: 0, caption: 'FIG. 1  CONSTRUCTION GRID 12 × 6', act: 'ACT I / IV' },
+  { at: CUE.act2, caption: 'FIG. 2  ENTRY  K / D / Z', act: 'ACT II / IV' },
+  { at: CUE.triptych, caption: 'FIG. 2.4  DETAILS B / C / D', act: 'ACT II / IV' },
+  { at: CUE.act3, caption: 'FIG. 3  PERMUTATION  3! = 6', act: 'ACT III / IV' },
+  { at: CUE.act4, caption: 'FIG. 4  LOCKUP', act: 'ACT IV / IV' }
+];
+const NUMERALS = ['I', 'II', 'III', 'IV'];
+const COL_INDEX = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
+const ROW_INDEX = ['A', 'B', 'C', 'D', 'E', 'F'];
+const PERMUTATIONS = [[0, 1, 2], [0, 2, 1], [1, 2, 0], [2, 1, 0], [2, 0, 1], [1, 0, 2]];
+const IN_ORDER = [0, 1, 2];
+const COPY = {
+  header: 'KDZ / STENCIL MONOLINE / TYPE SPECIMEN',
+  footer: 'DWG NO. KDZ-001   REV D   SCALE 1:1', footerScale: 'SCALE 1:1',
+  loop: 'LOOP ' + DURATION.toFixed(2) + ' S',
+  capLine: 'CAP LINE  1000', baseLine: 'BASELINE  0', capName: 'CAP LINE', baseName: 'BASELINE',
+  stroke: 'STROKE ' + 2 * PEN_HW, gap: 'GAP ' + GAP, overshoot: 'O/S +' + OVERSHOOT, radius: 'R ' + D.r,
+  detailA: 'DETAIL A  STEM / ARM  SCALE ', detailScaleTail: ':1', detailAGap: 'GAP ' + GAP,
+  tinyScale: 'SCALE 1:' + TINY_RATIO, tinyNote: 'CAP ' + SCALE_TINY + '  PEN ' + fixed1(TINY_WEIGHT) + '  OPTICAL SIZE',
+  notesHead: 'NOTES',
+  chainWidths: [String(GK.w), String(LOCKUP.spaceKD), String(GD.w), String(LOCKUP.spaceDZ), String(GZ.w)],
+  chainKern: ['KERN ' + LOCKUP.kernKD, 'KERN ' + LOCKUP.kernDZ],
+  beatTail: ' / ' + BEATS.count + '   ' + Math.round(60 / BEAT) + ' BPM'
+};
+const SPEC_GRID = [
+  'FIG. 1   GRID', 'STAGE    1920 × 1080', 'COLUMNS  12 × ' + GRID.col + ', GUTTER ' + (GRID.colStep - GRID.col),
+  'ROWS     6 × ' + GRID.row + ', GUTTER ' + (GRID.rowStep - GRID.row), 'BASELINE 8', 'MARGINS  ' + GRID.x + ' / ' + GRID.y,
+  'LOCKUP   CAP ' + LOCKUP.capStage + ' = ROWS B-D'
+];
+const specRow = (letter, first, second = '') => (letter.padEnd(4) + first).padEnd(second ? 16 : 0) + second;
+const SPEC_ENTRY = [
+  [CUE.kSlab + 0.05, 'FIG. 2   ENTRY  K / D / Z'],
+  [CUE.kDims + 0.05, specRow('K', 'STEM 1000', 'ARM ' + ARM_DEG)],
+  [CUE.kDims + 0.1, specRow('', 'LEG ' + LEG_DEG, 'BRANCH ' + K.branchAt.toFixed(2))],
+  [CUE.dDims + 0.05, specRow('D', 'BOWL R ' + D.r, 'O/S +' + OVERSHOOT)],
+  [CUE.dDims + 0.1, specRow('', 'STEM / BOWL GAP ' + GAP)],
+  [CUE.zDims, specRow('Z', 'DIAGONAL ' + Z_DEG)],
+  [CUE.zDims + 0.05, specRow('', 'BARS ' + Z.topBar + ' / ' + Z.baseBar)],
+  [CUE.chain2 + 0.05, 'SPACING  ' + LOCKUP.spacing + '   KERN ' + LOCKUP.kernKD + ' / ' + LOCKUP.kernDZ]
+];
+const VALUES = [
+  ['CAP HEIGHT', '1000'], ['STROKE', String(2 * PEN_HW)], ['STENCIL GAP', String(GAP)],
+  ['OVERSHOOT', '+' + OVERSHOOT], ['Z DIAGONAL', Z_DEG], ['D BOWL R', String(D.r)]
+];
+const NOTES = [
+  '1. STRAIGHT LINE AND CIRCULAR ARC, ONE ROUND PEN.',
+  '2. GAPS MEASURED NORMAL TO THE CONTINUOUS STROKE.',
+  '3. K LEG BRANCHES FROM THE ARM AT ' + K.branchAt.toFixed(2) + ' OF ITS LENGTH.',
+  '4. Z BARS ' + Z.topBar + ' / ' + Z.baseBar + ', BASE LONGER FOR OPTICAL BALANCE.'
+];
+const TITLE_BLOCK = [
+  [0, 0, 'DWG NO.', 'KDZ-001'], [276, 0, 'REV', 'D'], [414, 0, 'SHEET', '4 / 4'],
+  [0, 1, 'PEN', 'ROUND, MONOLINE'], [276, 1, 'UNITS', '1000 = CAP HEIGHT'],
+  [0, 2, 'TITLE', 'STENCIL MONOLINE  K D Z']
+];
+const PANELS = [
+  { x0: colL(0), x1: colR(3), letter: 'B', line1: 'K - ARM / LEG JUNCTION', zoom: PANEL_ZOOM, glyph: 0, focus: [K.legStart[0] - K.normal[0] * 50 - 20, K.legStart[1] - K.normal[1] * 50], clear: null },
+  { x0: colL(4), x1: colR(7), letter: 'C', line1: 'D - BOWL OVERSHOOT', zoom: 2 * PANEL_ZOOM, glyph: 1, focus: [50, 960], clear: [-60, 940, 140, 1100] },
+  { x0: colL(8), x1: colR(11), letter: 'D', line1: 'Z - DIAGONAL / TOP BAR', zoom: PANEL_ZOOM, glyph: 2, focus: [470, 900], clear: null }
+].map(panel => Object.assign(panel, { scale: 'SCALE ' + panel.zoom + ':1' }));
+
+/* ── primitive streams (one instance = one analytic SDF primitive) ── */
+const STRIDE = 16, MAX_RUNS = 256;
+const UNDER = 0, KNOCK = 1, OVER = 2;
+const STREAM_CAP = [4096, 1536, 12288];
+const prim = new Float32Array((STREAM_CAP[0] + STREAM_CAP[1] + STREAM_CAP[2]) * STRIDE);
+const streams = STREAM_CAP.map((cap, i) => ({
+  base: STREAM_CAP.slice(0, i).reduce((a, b) => a + b, 0), cap, count: 0, runs: 0,
+  runStart: new Int32Array(MAX_RUNS), runKnock: new Uint8Array(MAX_RUNS), runTextured: new Uint8Array(MAX_RUNS)
+}));
+const CUT = { none: 0, keepLeft: 1, keepRight: 2 };
+const pen = { layer: LAYER.letters, under: false, knock: 0, ink: 1, verm: 0, tone: 0, alpha: 1, x0: -1e5, y0: -1e5, x1: 1e5, y1: 1e5, cut: CUT.none, s: 1, tx: 0, ty: 0, textured: 0, seed: 0, seedBase: 0 };
+const fx = { time: 0, inverted: 0, invertX: -1e5, cell: 9, lensZoom: 1, regX: 0, regY: 0, cutX: 1e5, cutRule: false, halftone: 0, blurA: 0, blurBx: 0, blurBy: 0 };
+const paperCamera = new Float32Array(3), panelRects = new Float32Array(12), panelCameras = new Float32Array(9);
+const camera = { z: 1, x: 0, y: 0 }, camNow = { z: 1, x: 0, y: 0 }, camPrev = { z: 1, x: 0, y: 0 }, camTarget = { z: 1, x: 0, y: 0 };
+const CAM_ID = Object.freeze({ z: 1, x: 0, y: 0 });
+const SHEET_CLIP = { x0: 40, y0: CONTENT.y0, x1: W - 40, y1: CONTENT.y1 }, clipBase = { x0: -1e5, y0: -1e5, x1: 1e5, y1: 1e5 };
+const SHUTTER = 1 / 120, BLUR_MAX = 56;
+const scratch = new Float64Array(7);
+
+function emitPrimitive(target, knock, kind) {
+  const st = streams[target];
+  if (st.count >= st.cap || pen.alpha <= 0.004 || pen.x1 <= pen.x0 || pen.y1 <= pen.y0) return;
+  if (st.runs === 0 || st.runKnock[st.runs - 1] !== knock || st.runTextured[st.runs - 1] !== pen.textured) {
+    if (st.runs >= MAX_RUNS) return;
+    st.runStart[st.runs] = st.count; st.runKnock[st.runs] = knock; st.runTextured[st.runs] = pen.textured; st.runs++;
+  }
+  const o = (st.base + st.count++) * STRIDE;
+  prim[o] = scratch[0]; prim[o + 1] = scratch[1]; prim[o + 2] = scratch[2]; prim[o + 3] = scratch[3];
+  prim[o + 4] = scratch[4]; prim[o + 5] = scratch[5]; prim[o + 6] = scratch[6]; prim[o + 7] = kind * 16 + pen.layer + pen.cut * 256 + pen.textured * 1024 + pen.seed * 2048;
+  prim[o + 8] = pen.ink; prim[o + 9] = pen.verm; prim[o + 10] = pen.tone; prim[o + 11] = pen.alpha;
+  prim[o + 12] = pen.x0; prim[o + 13] = pen.y0; prim[o + 14] = pen.x1; prim[o + 15] = pen.y1;
+}
+function emitPen(kind) { emitPrimitive(pen.knock ? (pen.under ? KNOCK : OVER) : (pen.under ? UNDER : OVER), pen.knock, kind); }
+function seg(x0, y0, x1, y1, hw) {
+  const s = pen.s, tx = pen.tx, ty = pen.ty;
+  scratch[0] = x0 * s + tx; scratch[1] = y0 * s + ty; scratch[2] = x1 * s + tx; scratch[3] = y1 * s + ty;
+  scratch[4] = 0; scratch[5] = 0; scratch[6] = hw * s;
+  emitPen(0);
+}
+function arc(cx, cy, r, a0, a1, hw) {
+  const lo = a1 < a0 ? a1 : a0, hi = a1 < a0 ? a0 : a1, k = Math.round(lo / TAU) * TAU, s = pen.s;
+  scratch[0] = cx * s + pen.tx; scratch[1] = cy * s + pen.ty; scratch[2] = r * s; scratch[3] = 0;
+  scratch[4] = lo - k; scratch[5] = hi - k; scratch[6] = hw * s;
+  emitPen(1);
+}
+function rect(x0, y0, x1, y1, tone0 = 1, tone1 = tone0, vertical = false) {
+  const s = pen.s, tx = pen.tx, ty = pen.ty;
+  scratch[0] = x0 * s + tx; scratch[1] = y0 * s + ty; scratch[2] = x1 * s + tx; scratch[3] = y1 * s + ty;
+  scratch[4] = tone0; scratch[5] = tone1; scratch[6] = 0;
+  emitPen(vertical ? 3 : 2);
+}
+const hair = w => w / pen.s;
+const lineP = (x0, y0, x1, y1, p, hw) => { if (p > 0) seg(x0, y0, x0 + (x1 - x0) * p, y0 + (y1 - y0) * p, hw); };
+const tick = (x, y, size = 3.5) => { const k = hair(size); seg(x - k, y + k, x + k, y - k, hair(0.6)); };
+function dimH(x0, x1, y, p, over = 14) {
+  if (p <= 0) return;
+  const m = (x0 + x1) / 2, h = ((x1 - x0) / 2 + hair(over)) * p;
+  seg(m - h, y, m + h, y, hair(0.5));
+  if (p > 0.98) { tick(x0, y); tick(x1, y); }
+}
+function dimV(x, y0, y1, p, over = 14, tickSize = 3.5) {
+  if (p <= 0) return;
+  const m = (y0 + y1) / 2, h = ((y1 - y0) / 2 + hair(over)) * p;
+  seg(x, m - h, x, m + h, hair(0.5));
+  if (p > 0.98) { tick(x, y0, tickSize); tick(x, y1, tickSize); }
+}
+
+function setPaint(layer, alpha, ink, verm, tone, knock) {
+  pen.layer = layer; pen.under = layer === LAYER.grid || layer === LAYER.construction;
+  pen.alpha = alpha; pen.ink = ink; pen.verm = verm; pen.tone = tone; pen.knock = knock;
+}
+const paintInk = (layer, alpha = 1) => setPaint(layer, alpha, 1, 0, 0, 0);
+const paintVermilion = (layer, alpha = 1) => setPaint(layer, alpha, 0, 1, 0, 0);
+const paintTone = layer => setPaint(layer, 1, 0, 0, 1, 0);
+const paintKnock = (layer, alpha = 1) => setPaint(layer, alpha, 0, 0, 0, 1);
+const paintUnder = (layer, alpha) => { paintInk(layer, alpha); pen.under = true; };
+const clip = (x0, y0, x1, y1) => {
+  pen.x0 = Math.max(x0, clipBase.x0); pen.y0 = Math.max(y0, clipBase.y0); pen.x1 = Math.min(x1, clipBase.x1); pen.y1 = Math.min(y1, clipBase.y1);
+};
+const unclip = () => { pen.x0 = clipBase.x0; pen.y0 = clipBase.y0; pen.x1 = clipBase.x1; pen.y1 = clipBase.y1; };
+const clipContent = () => clip(CONTENT.x0, CONTENT.y0, CONTENT.x1, CONTENT.y1);
+const clipSheet = (x0, y0, x1, y1) => clip(x0 * camera.z + camera.x, y0 * camera.z + camera.y, x1 * camera.z + camera.x, y1 * camera.z + camera.y);
+const setView = (s, tx, ty) => { pen.s = camera.z * s; pen.tx = camera.z * tx + camera.x; pen.ty = camera.z * ty + camera.y; };
+const resetView = () => setView(1, 0, 0);
+function setCamera(c, bounds = SHEET_CLIP) {
+  camera.z = c.z; camera.x = c.x; camera.y = c.y;
+  const moved = c.z !== 1 || c.x !== 0 || c.y !== 0;
+  clipBase.x0 = moved ? bounds.x0 : -1e5; clipBase.y0 = moved ? bounds.y0 : -1e5;
+  clipBase.x1 = moved ? bounds.x1 : 1e5; clipBase.y1 = moved ? bounds.y1 : 1e5;
+  unclip(); resetView();
+}
+const clearCamera = () => setCamera(CAM_ID);
+
+/* ── camera: log-space zoom about the move's fixed point ── */
+function camLerp(a, b, u, out) {
+  const r = b.z / a.z;
+  if (Math.abs(r - 1) < 1e-6) { out.z = a.z; out.x = mix(a.x, b.x, u); out.y = mix(a.y, b.y, u); return out; }
+  const cx = (b.x - r * a.x) / (1 - r), cy = (b.y - r * a.y) / (1 - r), k = Math.pow(r, u);
+  out.z = a.z * k; out.x = cx + (a.x - cx) * k; out.y = cy + (a.y - cy) * k;
+  return out;
+}
+function camScale(c, k, ax, ay, out) { out.z = c.z * k; out.x = ax + (c.x - ax) * k; out.y = ay + (c.y - ay) * k; return out; }
+function camCopy(c, out) { out.z = c.z; out.x = c.x; out.y = c.y; return out; }
+const camMap = (fromX, fromY, fromS, toX, toY, toS) => { const z = toS / fromS; return Object.freeze({ z, x: toX - fromX * z, y: toY - fromY * z }); };
+function setMotionBlur(now, prev) {
+  const r = prev.z / now.z, a = 1 - r, bx = now.x * r - prev.x, by = now.y * r - prev.y;
+  const peak = Math.max(Math.hypot(bx, by), Math.hypot(W * a + bx, by), Math.hypot(bx, H * a + by), Math.hypot(W * a + bx, H * a + by));
+  const k = peak > BLUR_MAX ? BLUR_MAX / peak : 1;
+  fx.blurA = a * k; fx.blurBx = bx * k; fx.blurBy = by * k;
+}
+function usePaperCamera(c) { paperCamera[0] = c.z; paperCamera[1] = c.x; paperCamera[2] = c.y; }
+
+function beginFrame(t) {
+  for (let i = 0; i < 3; i++) { streams[i].count = 0; streams[i].runs = 0; }
+  fx.time = t; fx.inverted = 0; fx.invertX = -1e5; fx.cell = 9; fx.regX = 0; fx.regY = 0; fx.cutX = 1e5; fx.cutRule = false;
+  fx.halftone = 0; fx.lensZoom = 1; fx.blurA = fx.blurBx = fx.blurBy = 0;
+  usePaperCamera(CAM_ID); panelRects.fill(-1); panelCameras.fill(1);
+  clearCamera(); pen.cut = CUT.none; pen.seedBase = 0; paintInk(LAYER.letters);
+}
+
+/* ── type: hero glyphs, lettering, number buffer ────────── */
+function drawGlyph(g, ox, oy, s, prog = 1, hwMul = 1, keepGaps = false, textured = true) {
+  if (prog <= 0) return;
+  const parts = g.parts, hw = PEN_HW * s * hwMul, grow = keepGaps ? 2 * (hwMul - 1) * PEN_HW : 0;
+  let rem = prog * g.len;
+  pen.textured = textured ? 1 : 0;
+  for (let i = 0; i < parts.length && rem > 0; i++) {
+    const p = parts[i], f = rem >= p.len ? 1 : rem / p.len;
+    rem -= p.len;
+    pen.seed = (g.id * 11 + i * 5 + pen.seedBase) & 63;
+    if (p.arc) { arc(ox + p.cx * s, oy - p.cy * s, p.r * s, -p.a0, -(p.a0 + p.sweep * f), hw); continue; }
+    const ux = (p.x1 - p.x0) / p.len, uy = (p.y1 - p.y0) / p.len, a = grow * p.break0, b = p.len * f - (f < 1 ? 0 : grow * p.break1);
+    seg(ox + (p.x0 + ux * a) * s, oy - (p.y0 + uy * a) * s, ox + (p.x0 + ux * b) * s, oy - (p.y0 + uy * b) * s, hw);
+  }
+  pen.textured = 0;
+}
+const sheetX = (origin, gx) => origin + gx * LOCKUP.s;
+const sheetY = gy => LOCKUP.base - gy * LOCKUP.s;
+const drawSheetLockup = () => { drawGlyph(GK, LOCKUP.kx, LOCKUP.base, LOCKUP.s); drawGlyph(GD, LOCKUP.dx, LOCKUP.base, LOCKUP.s); drawGlyph(GZ, LOCKUP.zx, LOCKUP.base, LOCKUP.s); };
+const SKELETON = { dash: 14, dot: 2, gap: 4, width: 0.45, node: 5 };
+function skeletonPiece(p, ox, oy, s, a, b, hw) {
+  if (p.arc) { arc(ox + p.cx * s, oy - p.cy * s, p.r * s, -(p.a0 + p.sweep * a / p.len), -(p.a0 + p.sweep * b / p.len), hw); return; }
+  const ux = (p.x1 - p.x0) / p.len, uy = (p.y1 - p.y0) / p.len;
+  seg(ox + (p.x0 + ux * a) * s, oy - (p.y0 + uy * a) * s, ox + (p.x0 + ux * b) * s, oy - (p.y0 + uy * b) * s, hw);
+}
+function drawSkeleton(g, ox, oy, s, alpha) {
+  if (alpha <= 0.01) return;
+  paintKnock(LAYER.letters, alpha);
+  const px = s * pen.s, dash = SKELETON.dash / px, dot0 = (SKELETON.dash + SKELETON.gap) / px, dot1 = dot0 + SKELETON.dot / px;
+  const period = dot1 + SKELETON.gap / px, hw = hair(SKELETON.width), ring = hair(SKELETON.node);
+  for (let i = 0; i < g.parts.length; i++) {
+    const p = g.parts[i];
+    for (let a = 0; a < p.len; a += period) {
+      skeletonPiece(p, ox, oy, s, a, Math.min(p.len, a + dash), hw);
+      if (a + dot0 < p.len) skeletonPiece(p, ox, oy, s, a + dot0, Math.min(p.len, a + dot1), hw);
+    }
+    const x0 = p.arc ? p.cx + p.r * Math.cos(p.a0) : p.x0, y0 = p.arc ? p.cy + p.r * Math.sin(p.a0) : p.y0;
+    const x1 = p.arc ? p.cx + p.r * Math.cos(p.a0 + p.sweep) : p.x1, y1 = p.arc ? p.cy + p.r * Math.sin(p.a0 + p.sweep) : p.y1;
+    arc(ox + x0 * s, oy - y0 * s, ring, 0, TAU, hw); arc(ox + x1 * s, oy - y1 * s, ring, 0, TAU, hw);
+  }
+}
+
+const scrambleHash = (i, f) => (Math.imul(i + 1, 73856093) ^ Math.imul(f + 7, 19349663)) >>> 0;
+function drawChar(code, x, y, k, hw) {
+  const g = FONT[code];
+  if (!g) return;
+  for (let i = 0; i < g.length; i++) {
+    const pl = g[i];
+    for (let j = 0; j + 3 < pl.length; j += 2) seg(x + pl[j] * k, y - pl[j + 1] * k, x + pl[j + 2] * k, y - pl[j + 3] * k, hw);
+  }
+}
+function knockBox(x0, y0, x1, y1) {
+  const s = pen.s, alpha = pen.alpha;
+  pen.alpha = 1;
+  scratch[0] = x0 * s + pen.tx; scratch[1] = y0 * s + pen.ty; scratch[2] = x1 * s + pen.tx; scratch[3] = y1 * s + pen.ty;
+  scratch[4] = 1; scratch[5] = 1; scratch[6] = 0;
+  emitPrimitive(KNOCK, 1, 2);
+  pen.alpha = alpha;
+}
+const knockBlock = (x0, y0, x1, y1) => knockBox(x0 - TEXT_PAD, y0 - TEXT_PAD, x1 + TEXT_PAD, y1 + TEXT_PAD);
+const textArgs = new Float64Array(4);
+function drawText(src, len, size) {
+  const x = textArgs[0], y = textArgs[1], revealAt = textArgs[2], align = textArgs[3];
+  const k = size / 6, isString = typeof src === 'string';
+  let shown = len, cursor = 1e9;
+  if (revealAt !== STATIC) {
+    const elapsed = fx.time - revealAt;
+    if (elapsed < 0) return;
+    cursor = elapsed * Math.max(60, (len + 2) / REVEAL_WINDOW);
+    if (cursor < len + 2) shown = Math.min(len, Math.floor(cursor) + 2);
+    else cursor = 1e9;
+  }
+  const width = textWidth(src, len, size), x0 = x - width * align, hw = textWeight(size);
+  if (pen.cut !== CUT.none) {
+    const left = x0 * pen.s + pen.tx + offsets[pen.layer * 2];
+    if (pen.cut === CUT.keepLeft ? left + width * pen.s > fx.cutX : left < fx.cutX) return;
+  }
+  if (!pen.knock) knockBox(x0 - TEXT_PAD, y - size - TEXT_PAD, x0 + textWidth(src, shown, size) + TEXT_PAD, y + k + TEXT_PAD);
+  const seed = Math.floor(fx.time * 30);
+  let cx = x0, tokenEnd = 0;
+  for (let i = 0; i < shown; i++) {
+    let code = isString ? src.charCodeAt(i) : src[i];
+    const a = advance(src, i, len, size);
+    if (code !== 32) {
+      if (i >= cursor) code = code >= 65 && code <= 90 ? SCRAMBLE[scrambleHash(i, seed) % SCRAMBLE.length] : 0;
+      else if (cursor < 1e9 && NUMERIC[code]) {
+        if (i >= tokenEnd) { tokenEnd = i + 1; while (tokenEnd < len && NUMERIC[isString ? src.charCodeAt(tokenEnd) : src[tokenEnd]]) tokenEnd++; }
+        if (tokenEnd > cursor) code = 0;
+      }
+      if (code) drawChar(code, a < 1 ? cx - 1.5 * k : cx, y, k, hw);
+    }
+    cx += a * size;
+  }
+}
+function setTextArgs(x, y, revealAt, align) { textArgs[0] = x; textArgs[1] = y; textArgs[2] = revealAt; textArgs[3] = align; }
+const label = (str, x, y, size, revealAt = STATIC, align = 0) => { setTextArgs(x, y, revealAt, align); drawText(str, str.length, size); };
+
+const numberBuffer = { codes: new Uint8Array(64), len: 0 };
+const nbReset = () => { numberBuffer.len = 0; };
+function nbText(s) { for (let i = 0; i < s.length; i++) numberBuffer.codes[numberBuffer.len++] = s.charCodeAt(i); }
+function nbInt(v, digits) {
+  v = Math.floor(Math.abs(v));
+  for (let d = digits - 1; d >= 0; d--) numberBuffer.codes[numberBuffer.len++] = 48 + Math.floor(v / POW10[d]) % 10;
+}
+function nbSigned(v, digits, decimals) {
+  const r = Math.round(Math.abs(v) * POW10[decimals]);
+  numberBuffer.codes[numberBuffer.len++] = v < 0 && r > 0 ? 45 : 43;
+  nbInt(r / POW10[decimals], digits);
+  if (decimals > 0) { numberBuffer.codes[numberBuffer.len++] = 46; nbInt(r % POW10[decimals], decimals); }
+}
+function nbFixed(v, decimals) {
+  const r = Math.round(Math.abs(v) * POW10[decimals]);
+  nbInt(r / POW10[decimals], r >= 10 * POW10[decimals] ? 2 : 1);
+  numberBuffer.codes[numberBuffer.len++] = 46; nbInt(r % POW10[decimals], decimals);
+}
+const nbDraw = (x, y, size, align = 0) => { setTextArgs(x, y, STATIC, align); drawText(numberBuffer.codes, numberBuffer.len, size); };
+
+/* ── composition: sheet furniture ───────────────────────── */
+const RULER_INSET = 16, ROW_INDEX_X = CONTENT.x0 - 44, COL_INDEX_Y = rowT(0) + 18, COL_INDEX_CLEAR = COL_INDEX_Y + 10 / 6 + TEXT_PAD + 2;
+const CROSS_NEAR_LOCKUP = (() => {
+  const pts = [], s = LOCKUP.s, near = new Uint8Array(55);
+  const place = (g, ox) => {
+    for (const p of g.parts) for (let i = 0, n = Math.ceil(p.len / 2); i <= n; i++) {
+      const a = p.arc ? p.a0 + p.sweep * i / n : 0;
+      const gx = p.arc ? p.cx + p.r * Math.cos(a) : p.x0 + (p.x1 - p.x0) * i / n;
+      const gy = p.arc ? p.cy + p.r * Math.sin(a) : p.y0 + (p.y1 - p.y0) * i / n;
+      pts.push(ox + gx * s, LOCKUP.base - gy * s);
+    }
+  };
+  place(GK, LOCKUP.kx); place(GD, LOCKUP.dx); place(GZ, LOCKUP.zx);
+  for (let i = 0; i < 11; i++) for (let j = 0; j < 5; j++) {
+    const x = colR(i) + 12, y = rowB(j) + 12;
+    let d = 1e9;
+    for (let k = 0; k < pts.length; k += 2) d = Math.min(d, Math.hypot(pts[k] - x, pts[k + 1] - y));
+    near[i * 5 + j] = d - PEN_HW * s - 4 < 8 ? 1 : 0;
+  }
+  return near;
+})();
+const CROSS_NEAR_LABELS = (() => {
+  const near = new Uint8Array(55), x0 = colL(8) + TEXT_INSET - TEXT_PAD, reach = 24;
+  const w = Math.max(textWidth(COPY.capLine, COPY.capLine.length, 12), textWidth(COPY.baseLine, COPY.baseLine.length, 12));
+  const baselines = [LOCKUP.cap + 6, LOCKUP.base + 6];
+  for (let i = 0; i < 11; i++) for (let j = 0; j < 5; j++) {
+    const x = colR(i) + 12, y = rowB(j) + 12;
+    const hugsColumn = x < x0 && x0 - x < reach;
+    const nearLabel = x > x0 - reach && x < x0 + w + reach && baselines.some(b => y > b - 12 - reach && y < b + 2 + reach);
+    near[i * 5 + j] = hugsColumn || nearLabel ? 1 : 0;
+  }
+  return near;
+})();
+const CROSS_CLEAR = { none: 0, lockup: 1, labels: 2 };
+function composeRuler(cycle) {
+  const ticks = Math.floor(easeOutExpo(progress(cycle, CUE.gridTicks, CUE.gridTicks + 1)) * 118);
+  for (let i = 0; i < ticks; i++) {
+    const y = CONTENT.y0 + i * 8, l = i % 5 === 0 ? 11 : 5;
+    seg(CONTENT.x0 - RULER_INSET - l, y, CONTENT.x0 - RULER_INSET, y, 0.45);
+    seg(CONTENT.x1 + RULER_INSET, y, CONTENT.x1 + RULER_INSET + l, y, 0.45);
+  }
+}
+function composeGridColumns(cycle) {
+  for (let i = 0; i < 24; i++) {
+    const x = i & 1 ? colR(i >> 1) : colL(i >> 1), st = CUE.gridCols + i * 0.022;
+    const p = easeSettle(progress(cycle, st, st + CUE.gridDraw));
+    if (p > 0) seg(x, CONTENT.y0, x, CONTENT.y0 + (CONTENT.y1 - CONTENT.y0) * p, 0.5);
+  }
+}
+function composeGridRows(cycle) {
+  for (let k = 0; k < 12; k++) {
+    const y = k & 1 ? rowB(k >> 1) : rowT(k >> 1), st = CUE.gridRows + k * 0.04;
+    const p = easeSettle(progress(cycle, st, st + CUE.gridDraw));
+    if (p > 0) seg(CONTENT.x0, y, CONTENT.x0 + (CONTENT.x1 - CONTENT.x0) * p, y, 0.5);
+  }
+}
+function composeGutterCrosses(cycle, clear) {
+  for (let i = 0; i < 11; i++) for (let j = 0; j < 5; j++) {
+    const k = i * 5 + j;
+    if ((clear & CROSS_CLEAR.lockup && CROSS_NEAR_LOCKUP[k]) || (clear & CROSS_CLEAR.labels && CROSS_NEAR_LABELS[k])) continue;
+    const st = CUE.gutterCrosses + (i + j) * 0.02, p = easeOutExpo(progress(cycle, st, st + 0.3));
+    if (p <= 0) continue;
+    const x = colR(i) + 12, y = rowB(j) + 12, a = 4 * p;
+    seg(x - a, y, x + a, y, 0.5); seg(x, y - a, x, y + a, 0.5);
+  }
+}
+function composeGridIndices() {
+  for (let i = 0; i < 12; i++) label(COL_INDEX[i], colL(i) + TEXT_INSET, COL_INDEX_Y, 10, CUE.colIndex + i * 0.03);
+  for (let j = 0; j < 6; j++) label(ROW_INDEX[j], ROW_INDEX_X, rowT(j) + 14, 10, CUE.rowIndex + j * 0.05);
+}
+function composeGrid(cycle, alpha, lines, labels, clear) {
+  if (lines) {
+    paintInk(LAYER.grid, alpha);
+    composeGridColumns(cycle); composeGridRows(cycle); composeRuler(cycle);
+    paintInk(LAYER.grid, Math.min(1, alpha * 1.3));
+    composeGutterCrosses(cycle, clear);
+  }
+  const labelAlpha = Math.min(0.6, alpha * 2.3) * clamp((1.8 - camera.z) / 0.8);
+  if (!labels || labelAlpha <= 0) return;
+  paintInk(LAYER.meta, labelAlpha);
+  composeGridIndices();
+}
+function viewGrid(clearX0, clearY0, clearX1, clearY1) {
+  const hw = hair(0.5);
+  for (let c = 0; c < 24; c++) {
+    const x = c & 1 ? colR(c >> 1) : colL(c >> 1);
+    if (x <= clearX0 || x >= clearX1) seg(x, CONTENT.y0, x, CONTENT.y1, hw);
+  }
+  for (let r = 0; r < 12; r++) {
+    const y = r & 1 ? rowB(r >> 1) : rowT(r >> 1);
+    if (y <= clearY0 || y >= clearY1) seg(CONTENT.x0, y, CONTENT.x1, y, hw);
+  }
+}
+
+function composeConstruction(u, alpha, namesOnly) {
+  if (u <= 0) return;
+  clipContent(); paintInk(LAYER.construction, alpha);
+  constructionLines(u);
+  constructionDiagonals(u);
+  unclip();
+  paintInk(LAYER.meta, 0.9);
+  const t0 = fx.time - u;
+  label(namesOnly ? COPY.capName : COPY.capLine, colL(8) + TEXT_INSET, LOCKUP.cap + 6, 12, t0 + 0.8);
+  label(namesOnly ? COPY.baseName : COPY.baseLine, colL(8) + TEXT_INSET, LOCKUP.base + 6, 12, t0 + 0.9);
+}
+function constructionLines(u) {
+  const s = LOCKUP.s, cap = LOCKUP.cap, base = LOCKUP.base, lineEnd = colL(8) - 12;
+  lineP(CONTENT.x0, cap, lineEnd, cap, easeSettle(progress(u, 0, 0.8)), 0.55);
+  lineP(CONTENT.x0, base, lineEnd, base, easeSettle(progress(u, 0.1, 0.9)), 0.55);
+  let p = easeSettle(progress(u, 0.4, 0.9));
+  const bowlX = LOCKUP.dx + D.bowlX * s, bowlEnd = LOCKUP.dx + (D.bowlX + D.r + 60) * s;
+  lineP(bowlX, cap - OVERSHOOT * s, bowlEnd, cap - OVERSHOOT * s, p, 0.4);
+  lineP(bowlX, base + OVERSHOOT * s, bowlEnd, base + OVERSHOOT * s, p, 0.4);
+  const dcx = bowlX, dcy = base - 500 * s;
+  p = easeSettle(progress(u, 0.5, 1.3));
+  if (p > 0) arc(dcx, dcy, D.r * s, -Math.PI / 2, -Math.PI / 2 + TAU * p, 0.5);
+  p = easeOutExpo(progress(u, 0.8, 1.1));
+  if (p > 0) { seg(dcx - 6 * p, dcy, dcx + 6 * p, dcy, 0.5); seg(dcx, dcy - 6 * p, dcx, dcy + 6 * p, 0.5); }
+}
+function constructionDiagonals(u) {
+  const s = LOCKUP.s, cap = LOCKUP.cap, base = LOCKUP.base;
+  let p = easeSettle(progress(u, 0.6, 1.3));
+  const zTopX = LOCKUP.zx + Z.topBar * s, zFootX = LOCKUP.zx + Z.footX * s, extTop = 0.12, extFoot = 0.05;
+  lineP(zTopX + (zTopX - zFootX) * extTop, cap - (base - cap) * extTop, zFootX - (zTopX - zFootX) * extFoot, base + (base - cap) * extFoot, p, 0.5);
+  const jx = LOCKUP.kx, jy = base - K.join[1] * s, bx = LOCKUP.kx + K.branch[0] * s, by = base - K.branch[1] * s;
+  p = easeSettle(progress(u, 0.7, 1.4));
+  lineP(jx, jy, jx + (K.top[0] - K.join[0]) * s * 1.1, jy - (K.top[1] - K.join[1]) * s * 1.1, p, 0.5);
+  lineP(bx, by, bx + (K.foot[0] - K.branch[0]) * s * 1.1, by - (K.foot[1] - K.branch[1]) * s * 1.1, p, 0.5);
+}
+
+const SPEC_X = colL(8) + TEXT_INSET, SPEC_Y = rowT(1) + 56, SPEC_LEAD = 22;
+const blockWidth = (lines, size) => lines.reduce((w, line) => Math.max(w, textWidth(line, line.length, size)), 0);
+const SPEC_GRID_W = blockWidth(SPEC_GRID, 10), SPEC_ENTRY_W = blockWidth(SPEC_ENTRY.map(entry => entry[1]), 10);
+function specBlockKnock(lines, width) {
+  if (lines > 0) knockBlock(SPEC_X, LOCKUP.cap + 8, SPEC_X + width, SPEC_Y + (lines - 1) * SPEC_LEAD + 2);
+}
+function specList(lines, width, revealAt, stagger) {
+  paintInk(LAYER.meta, 0.94);
+  specBlockKnock(Math.min(lines.length, Math.floor((fx.time - revealAt) / stagger) + 1), width);
+  for (let i = 0; i < lines.length; i++) label(lines[i], SPEC_X, SPEC_Y + i * SPEC_LEAD, 10, revealAt + i * stagger);
+}
+function specEntry() {
+  paintInk(LAYER.meta, 0.94);
+  let shown = 0;
+  while (shown < SPEC_ENTRY.length && fx.time >= SPEC_ENTRY[shown][0]) shown++;
+  specBlockKnock(shown, SPEC_ENTRY_W);
+  for (let i = 0; i < SPEC_ENTRY.length; i++) label(SPEC_ENTRY[i][1], SPEC_X, SPEC_Y + i * SPEC_LEAD, 10, SPEC_ENTRY[i][0]);
+}
+
+/* ── composition: dimensions on the sheet lockup ────────── */
+const dimProgress = t0 => easeOutExpo(progress(fx.time, t0, t0 + 0.5));
+const DIM_LANE = LOCKUP.cap - 36, DIM_LABEL = LOCKUP.cap - 50;
+const OVERSHOOT_DIM_X = LOCKUP.dx + (D.bowlX + D.r + 40) * LOCKUP.s;
+function dimsK(t0, withStroke) {
+  const p = dimProgress(t0);
+  if (p <= 0) return;
+  const s = LOCKUP.s, jx = LOCKUP.kx, jy = LOCKUP.base - K.join[1] * s, kFootX = LOCKUP.kx + K.foot[0] * s;
+  const x0 = LOCKUP.kx - PEN_HW * s, x1 = LOCKUP.kx + PEN_HW * s;
+  paintInk(LAYER.construction, 0.85);
+  lineP(x1 + 8, jy, jx + 150, jy, p, 0.45);
+  arc(jx, jy, 112, -K.armAngle * RAD * p, 0, 0.5);
+  arc(kFootX, LOCKUP.base, 72, -Math.PI, -Math.PI + K.legAngle * RAD * p, 0.5);
+  if (withStroke) {
+    lineP(x0, LOCKUP.cap - 17, x0, DIM_LANE - 6, p, 0.45); lineP(x1, LOCKUP.cap - 17, x1, DIM_LANE - 6, p, 0.45);
+    dimH(x0, x1, DIM_LANE, p, 6);
+  }
+  paintInk(LAYER.meta, 0.94);
+  label(ARM_DEG, jx + 24, jy + 30, 12, t0 + 0.2);
+  label(LEG_DEG, kFootX - 142, LOCKUP.base - 12, 12, t0 + 0.25);
+  if (withStroke) label(COPY.stroke, x0 + TEXT_INSET, DIM_LABEL, 12, t0 + 0.2);
+}
+function dimsD(t0) {
+  const p = dimProgress(t0);
+  if (p <= 0) return;
+  const s = LOCKUP.s, cx = LOCKUP.dx + D.bowlX * s, cy = LOCKUP.base - 500 * s, r = D.r * s, a = -35 * RAD;
+  const osTop = LOCKUP.cap - OVERSHOOT * s;
+  paintInk(LAYER.construction, 0.85);
+  lineP(cx, cy, cx + Math.cos(a) * r, cy + Math.sin(a) * r, p, 0.5);
+  seg(cx - 5, cy - 5, cx + 5, cy + 5, 0.45); seg(cx - 5, cy + 5, cx + 5, cy - 5, 0.45);
+  dimV(OVERSHOOT_DIM_X, osTop, LOCKUP.cap, p, 10);
+  lineP(OVERSHOOT_DIM_X, osTop - 10, OVERSHOOT_DIM_X, DIM_LABEL, p, 0.45);
+  paintInk(LAYER.meta, 0.94);
+  label(COPY.radius, cx + 14, cy + 28, 12, t0 + 0.2);
+  label(COPY.overshoot, OVERSHOOT_DIM_X, DIM_LABEL, 12, t0 + 0.25, 0.5);
+}
+function dimsZ(t0) {
+  const p = dimProgress(t0);
+  if (p <= 0) return;
+  const zFootX = LOCKUP.zx + Z.footX * LOCKUP.s;
+  paintInk(LAYER.construction, 0.85);
+  arc(zFootX, LOCKUP.base, 76, -Z.angle * RAD * p, 0, 0.5);
+  paintInk(LAYER.meta, 0.94);
+  label(Z_DEG, zFootX + 84, LOCKUP.base - 44, 12, t0 + 0.2);
+}
+const CHAIN_Y = rowT(4) + 40;
+const CHAIN_X = Float32Array.of(LOCKUP.kx + GK.x0 * LOCKUP.s, LOCKUP.kx + GK.x1 * LOCKUP.s, LOCKUP.dx + GD.x0 * LOCKUP.s, LOCKUP.dx + GD.x1 * LOCKUP.s, LOCKUP.zx + GZ.x0 * LOCKUP.s, LOCKUP.zx + GZ.x1 * LOCKUP.s);
+function dimsChain(t0) {
+  const p = dimProgress(t0);
+  if (p <= 0) return;
+  const xs = CHAIN_X;
+  paintInk(LAYER.construction, 0.85);
+  for (let i = 0; i < 6; i++) lineP(xs[i], rowT(4), xs[i], CHAIN_Y + 8, p, 0.45);
+  const h = (xs[5] - xs[0]) * p;
+  seg(xs[0], CHAIN_Y, xs[0] + h, CHAIN_Y, 0.5);
+  if (p > 0.98) for (let i = 0; i < 6; i++) tick(xs[i], CHAIN_Y);
+  paintInk(LAYER.meta, 0.94);
+  for (let i = 0; i < 5; i++) label(COPY.chainWidths[i], (xs[i] + xs[i + 1]) / 2, CHAIN_Y - 10, 12, t0 + 0.2 + i * 0.04, 0.5);
+  paintInk(LAYER.meta, 0.6);
+  label(COPY.chainKern[0], (xs[1] + xs[2]) / 2, CHAIN_Y + 24, 10, t0 + 0.3, 0.5);
+  label(COPY.chainKern[1], (xs[3] + xs[4]) / 2, CHAIN_Y + 24, 10, t0 + 0.34, 0.5);
+}
+function dimsGap(t0) {
+  const p = dimProgress(t0);
+  if (p <= 0) return;
+  const s = LOCKUP.s, xs = LOCKUP.dx + PEN_HW * s, xb = LOCKUP.dx + (D.barX - PEN_HW) * s;
+  paintVermilion(LAYER.construction);
+  lineP(xs, LOCKUP.cap - 17, xs, DIM_LANE - 6, p, 0.5); lineP(xb, LOCKUP.cap - 17 - OVERSHOOT * s, xb, DIM_LANE - 6, p, 0.5);
+  dimH(xs, xb, DIM_LANE, p);
+  paintVermilion(LAYER.meta);
+  label(COPY.gap, (xs + xb) / 2, DIM_LABEL, 12, t0 + 0.2, 0.5);
+}
+
+/* ── composition: acts ──────────────────────────────────── */
+function composeActI(cycle) {
+  composeGrid(cycle, 0.5, true, true, CROSS_CLEAR.labels);
+  composeConstruction(cycle - CUE.construct1, 0.55, false);
+  specList(SPEC_GRID, SPEC_GRID_W, CUE.spec1, 0.1);
+}
+
+const DETAIL_ANCHOR_X = 820, DETAIL_ANCHOR_Y = 560, DETAIL_DRIFT = 0.04;
+const DETAIL_FOCUS_X = LOCKUP.kx + 50 * LOCKUP.s, DETAIL_FOCUS_Y = LOCKUP.base - K.armStart[1] * LOCKUP.s;
+const DETAIL_CAM = Object.freeze({ z: DETAIL_ZOOM, x: DETAIL_ANCHOR_X - DETAIL_FOCUS_X * DETAIL_ZOOM, y: DETAIL_ANCHOR_Y - DETAIL_FOCUS_Y * DETAIL_ZOOM });
+function detailCamera(t, out) {
+  const u = easeCamera(progress(t, CUE.detailIn, CUE.detailArrive)) * (1 - easeCamera(progress(t, CUE.detailOut, CUE.detailBack)));
+  if (u <= 0) return camCopy(CAM_ID, out);
+  const k = 1 + DETAIL_DRIFT * easeInOutSine(progress(t, CUE.detailArrive - 0.25, CUE.detailBack));
+  return camLerp(CAM_ID, camScale(DETAIL_CAM, k, DETAIL_ANCHOR_X, DETAIL_ANCHOR_Y, camTarget), u, out);
+}
+function composeDetailOverlay(t) {
+  const reveal = clamp((camera.z - 1.6) / 1.4);
+  if (reveal <= 0) return;
+  const s = LOCKUP.s, stemEdge = LOCKUP.kx + PEN_HW * s, armEdge = LOCKUP.kx + (K.armStart[0] - PEN_HW) * s;
+  drawSkeleton(GK, LOCKUP.kx, LOCKUP.base, s, 0.85 * reveal);
+  const p = easeOutExpo(progress(t, CUE.detailArrive - 0.25, CUE.detailArrive + 0.3)) * (1 - progress(t, CUE.detailOut, CUE.detailOut + 0.2));
+  paintInk(LAYER.construction, 0.9);
+  dimH(stemEdge, armEdge, DETAIL_FOCUS_Y, p);
+  if (t < CUE.detailArrive - 0.1 || t >= CUE.detailOut) return;
+  const labelX = (stemEdge + armEdge) / 2 * camera.z + camera.x, labelY = DETAIL_FOCUS_Y * camera.z + camera.y + 40, z = camera.z;
+  clearCamera();
+  paintInk(LAYER.meta, 0.94);
+  label(COPY.detailAGap, labelX, labelY, 14, CUE.detailArrive - 0.1, 0.5);
+  nbReset(); nbText(COPY.detailA); nbFixed(z, 1); nbText(COPY.detailScaleTail); nbDraw(colL(0) + TEXT_INSET, rowB(5) - 12, 12);
+}
+
+function composeSlabK(t) {
+  const s = LOCKUP.s, x0 = CONTENT.x0 - RULER_INSET, x1 = LOCKUP.kx + GK.x1 * s + SLAB.pad;
+  const grow = mix(SLAB.y0, SLAB.y1, easeOutExpo(progress(t, CUE.kSlab, CUE.kSlab + CUE.slabGrow)));
+  const wipe = mix(SLAB.y0, SLAB.y1, easeWipe(progress(t, CUE.kPositive, CUE.kPositive + CUE.kReveal)));
+  const plot = easePlot(progress(t, CUE.kPlot, CUE.kPlot + 0.55));
+  if (wipe > SLAB.y0) { clipSheet(x0, CONTENT.y0, x1 + 40, wipe); paintInk(LAYER.letters); drawGlyph(GK, LOCKUP.kx, LOCKUP.base, s, plot); }
+  if (wipe < grow) {
+    clipSheet(x0, wipe, x1, grow);
+    paintInk(LAYER.letters); rect(x0, SLAB.y0, x1, SLAB.y1);
+    paintKnock(LAYER.letters); drawGlyph(GK, LOCKUP.kx, LOCKUP.base, s, plot);
+  }
+  unclip();
+}
+
+const TRAIL_RULE_MIN = 0.05;
+function composeActII(t) {
+  const s = LOCKUP.s;
+  detailCamera(t, camNow); detailCamera(Math.max(CUE.act2, t - SHUTTER), camPrev);
+  setCamera(camNow); setMotionBlur(camNow, camPrev); usePaperCamera(camNow);
+  fx.lensZoom = camNow.z;
+  composeGrid(t, mix(0.5, 0.26, easeOutExpo(progress(t, CUE.act2, CUE.act2 + 0.7))), true, true, CROSS_CLEAR.lockup | CROSS_CLEAR.labels);
+  composeConstruction(t - CUE.construct1, 0.4, false);
+  if (t < CUE.kPositive + CUE.kReveal) composeSlabK(t);
+  else { paintInk(LAYER.letters); drawGlyph(GK, LOCKUP.kx, LOCKUP.base, s); }
+  dimsK(CUE.kDims, true);
+  if (t >= CUE.dBand) {
+    const d0 = LOCKUP.dx + GD.x0 * s - SLAB.pad, d1 = LOCKUP.dx + GD.x1 * s + SLAB.pad, w = d1 - d0;
+    const lead = easeSettle(progress(t, CUE.dBand, CUE.dBand + 0.38)), trail = easeInOutExpo(progress(t, CUE.dTrail, CUE.dTrail + 0.44));
+    const p0 = Math.min(d1, d0 + (w + 40) * trail), p1 = d0 + w * lead, band = p1 - p0 > (trail > 0 ? 30 : 0.5);
+    if (trail > 0) { clipSheet(d0 - 40, CONTENT.y0, band ? p0 : d1, CONTENT.y1); paintInk(LAYER.letters); drawGlyph(GD, LOCKUP.dx, LOCKUP.base, s); }
+    if (band) {
+      clipSheet(p0, SLAB.y0, p1, SLAB.y1);
+      paintInk(LAYER.letters); rect(p0, SLAB.y0, p1, SLAB.y1);
+      paintKnock(LAYER.letters); drawGlyph(GD, LOCKUP.dx, LOCKUP.base, s);
+      unclip();
+      if (trail > TRAIL_RULE_MIN) { paintUnder(LAYER.letters, 0.8); seg(p0, COL_INDEX_CLEAR, p0, SLAB.y0, 0.6); seg(p0, SLAB.y1, p0, CONTENT.y1, 0.6); }
+    }
+    unclip();
+    dimsD(CUE.dDims);
+  }
+  if (t >= CUE.zDraw) {
+    paintInk(LAYER.letters); drawGlyph(GZ, LOCKUP.zx, LOCKUP.base, s, easePlot(progress(t, CUE.zDraw, CUE.zDraw + 0.5)));
+    dimsZ(CUE.zDims);
+    dimsChain(CUE.chain2);
+  }
+  specEntry();
+  composeDetailOverlay(t);
+}
+
+const PANEL_PUSH_FROM = 0.55, PANEL_DRIFT = 0.035;
+function composePanel(i, t) {
+  const panel = PANELS[i], t0 = CUE.triptych + i * CUE.panelStagger, w0 = t0 - CUE.panelLead, c0 = CUE.triptychOut + i * CUE.panelCloseStagger;
+  const open = easeOutExpo(progress(t, w0, w0 + CUE.panelOpen)), shut = easeWipe(progress(t, c0, c0 + CUE.panelClose));
+  if (open <= 0 || shut >= 1) return;
+  const push = mix(PANEL_PUSH_FROM, 1, easeSettle(progress(t, w0, w0 + CUE.panelPush))) * (1 + PANEL_DRIFT * progress(t, w0, CUE.act3));
+  const zoom = panel.zoom * push;
+  const s = LOCKUP.s, x0 = panel.x0, x1 = panel.x1, y0 = mix(CONTENT.y0, CONTENT.y1, shut), y1 = mix(CONTENT.y0, CONTENT.y1, open);
+  const origin = panel.glyph === 0 ? LOCKUP.kx : panel.glyph === 1 ? LOCKUP.dx : LOCKUP.zx;
+  const focusX = origin + panel.focus[0] * s, focusY = LOCKUP.base - panel.focus[1] * s;
+  const clearX0 = panel.clear ? sheetX(origin, panel.clear[0]) : 1e5, clearX1 = panel.clear ? sheetX(origin, panel.clear[2]) : -1e5;
+  const clearY0 = panel.clear ? sheetY(panel.clear[3]) : 1e5, clearY1 = panel.clear ? sheetY(panel.clear[1]) : -1e5;
+  const camX = (x0 + x1) / 2 - focusX * zoom, camY = (CONTENT.y0 + CONTENT.y1) / 2 - focusY * zoom;
+  panelRects[i * 4] = x0; panelRects[i * 4 + 1] = y0; panelRects[i * 4 + 2] = x1; panelRects[i * 4 + 3] = y1;
+  panelCameras[i * 3] = zoom; panelCameras[i * 3 + 1] = camX; panelCameras[i * 3 + 2] = camY;
+  fx.lensZoom = Math.max(fx.lensZoom, PANEL_ZOOM * push);
+  clip(x0, y0, x1, y1);
+  setView(zoom, camX, camY);
+  paintUnder(LAYER.letters, 0.26); viewGrid(clearX0, clearY0, clearX1, clearY1);
+  paintUnder(LAYER.letters, 0.5);
+  if (LOCKUP.cap <= clearY0 || LOCKUP.cap >= clearY1) seg(CONTENT.x0, LOCKUP.cap, colL(8) - 12, LOCKUP.cap, hair(0.55));
+  seg(CONTENT.x0, LOCKUP.base, colL(8) - 12, LOCKUP.base, hair(0.55));
+  paintInk(LAYER.letters); drawSheetLockup();
+  drawSkeleton(GLYPHS[panel.glyph], origin, LOCKUP.base, s, 0.85);
+  let labelX = 0, labelY = 0, labelDY = 0, labelAlign = 0;
+  if (i === 0) {
+    const normal = K.normal, ls = K.legStart;
+    const ax = ls[0] - normal[0] * (CLEAR - PEN_HW), ay = ls[1] - normal[1] * (CLEAR - PEN_HW);
+    const bx = ls[0] - normal[0] * PEN_HW, by = ls[1] - normal[1] * PEN_HW;
+    paintVermilion(LAYER.letters);
+    seg(sheetX(origin, ax), sheetY(ay), sheetX(origin, bx), sheetY(by), hair(0.75));
+    const tx = K.arm[0] * hair(7), ty = -K.arm[1] * hair(7);
+    seg(sheetX(origin, ax) - tx, sheetY(ay) - ty, sheetX(origin, ax) + tx, sheetY(ay) + ty, hair(0.75));
+    seg(sheetX(origin, bx) - tx, sheetY(by) - ty, sheetX(origin, bx) + tx, sheetY(by) + ty, hair(0.75));
+    labelX = sheetX(origin, ls[0] - K.arm[0] * 95 - normal[0] * 50); labelY = sheetY(ls[1] - K.arm[1] * 95 - normal[1] * 50);
+    labelDY = 7; labelAlign = 0.5;
+  } else if (i === 1) {
+    const stemTop = 1000 + PEN_HW, bowlTop = stemTop + OVERSHOOT, dimX = D.barX / 2;
+    paintUnder(LAYER.letters, 0.8);
+    seg(sheetX(origin, 12), sheetY(stemTop), sheetX(origin, dimX + 10), sheetY(stemTop), hair(0.5));
+    seg(sheetX(origin, D.barX - 12), sheetY(bowlTop), sheetX(origin, dimX - 10), sheetY(bowlTop), hair(0.5));
+    paintInk(LAYER.letters, 0.9);
+    dimV(sheetX(origin, dimX), sheetY(bowlTop), sheetY(stemTop), 1, 16, 5);
+    labelX = sheetX(origin, dimX); labelY = sheetY(bowlTop); labelDY = -28; labelAlign = 0.5;
+  } else {
+    paintInk(LAYER.letters, 0.9);
+    const x = sheetX(origin, Z.diagTop[0]);
+    dimV(x, sheetY(1000 - PEN_HW), sheetY(Z.diagTop[1] + PEN_HW), 1, 10);
+    labelX = sheetX(origin, Z.diagTop[0] + 26); labelY = sheetY(Z.diagTop[1] + 42);
+  }
+  labelX = labelX * pen.s + pen.tx; labelY = labelY * pen.s + pen.ty + labelDY;
+  resetView();
+  if (i === 0) paintVermilion(LAYER.letters); else paintInk(LAYER.letters, 0.94);
+  pen.under = false;
+  label(i === 1 ? COPY.overshoot : COPY.gap, labelX, labelY, 14, t0 + CUE.panelTab, labelAlign);
+  paintInk(LAYER.letters, 0.9);
+  seg(x0, y0, x1, y0, 0.6); seg(x0, y0, x0, y1, 0.6); seg(x1, y0, x1, y1, 0.6); seg(x0, y1, x1, y1, 0.6);
+  const tab = progress(t, t0 + CUE.panelTab, t0 + CUE.panelTab + 0.1);
+  if (tab > 0) {
+    const tw = 56 + textWidth(panel.line1, panel.line1.length, 12) + 20, ty0 = CONTENT.y1 - 60;
+    paintInk(LAYER.letters); rect(x0, ty0, x0 + tw * easeOutExpo(tab), CONTENT.y1);
+    paintKnock(LAYER.letters);
+    label(panel.letter, x0 + 16, CONTENT.y1 - 18, 24, t0 + CUE.panelTab);
+    label(panel.line1, x0 + 56, CONTENT.y1 - 34, 12, t0 + CUE.panelTab + 0.02);
+    label(panel.scale, x0 + 56, CONTENT.y1 - 16, 10, t0 + CUE.panelTab + 0.04);
+  }
+  unclip();
+}
+function composeTriptych(t) {
+  for (let i = 0; i < 3; i++) composePanel(i, t);
+}
+
+const MATRIX_S = 0.084, MATRIX_BASE_DY = 26;
+function permutationRows(t, converge) {
+  paintInk(LAYER.letters);
+  for (let j = 0; j < 6; j++) {
+    let shift, order, right = j === 0 ? colR(10) + 12 : CONTENT.x1;
+    if (!converge) {
+      const v = t - CUE.act3 - j * 0.035;
+      right = mix(CONTENT.x0, right, easeWipe(progress(t, CUE.act3 + j * CUE.rowStagger, CUE.act3 + j * CUE.rowStagger + CUE.rowEntry)));
+      shift = v < 0 ? 0 : Math.floor(v / BEAT) + easeOutExpo(clamp((v % BEAT) / 0.24));
+      if (j & 1) shift = -shift;
+      order = PERMUTATIONS[j];
+    } else {
+      const st = CUE.rowsCut + j * 0.02;
+      shift = j * (1 - easeSettle(progress(t, st, st + 0.3))) * (j & 1 ? -1 : 1);
+      order = IN_ORDER;
+    }
+    clipSheet(CONTENT.x0, rowT(j), right, rowB(j));
+    const m0 = -Math.ceil(shift) - 1;
+    for (let m = m0; m < m0 + 15; m++) {
+      const g = GLYPHS[order[((m % 3) + 3) % 3]], x = colL(m) + shift * GRID.colStep + GRID.col / 2;
+      setView(MATRIX_S, x - g.cx * MATRIX_S, rowB(j) - MATRIX_BASE_DY);
+      pen.seedBase = j * 7 + m;
+      drawGlyph(g, 0, 0, 1);
+    }
+  }
+  pen.seedBase = 0;
+  unclip(); resetView();
+}
+
+const TINY = (() => {
+  const s = SCALE_TINY / 1000, w = LOCKUP_FONT_W * s, x0 = W / 2 - w / 2, base = H / 2 + SCALE_TINY / 2, kx = x0 - GK.x0 * s;
+  const dx = kx + (GK.x1 + LOCKUP.spaceKD - GD.x0) * s;
+  return { s, w, x0, base, kx, dx, zx: dx + (GD.x1 + LOCKUP.spaceDZ - GZ.x0) * s };
+})();
+const MATRIX_D = { row: 2, x: colL(3) + 2 * GRID.colStep + GRID.col / 2 - GD.cx * MATRIX_S, y: rowB(2) - MATRIX_BASE_DY };
+const GIANT_D = { s: GIANT_D_SCALE, x: W / 2 - GD.cx * GIANT_D_SCALE, y: CONTENT.y1 - 16 - (OVERSHOOT + PEN_HW) * GIANT_D_SCALE };
+const HIT = { s: LOCKUP.s, base: H / 2 + 500 * LOCKUP.s, kx: (colL(0) + colR(3)) / 2 - GK.cx * LOCKUP.s, dx: (colL(4) + colR(7)) / 2 - GD.cx * LOCKUP.s };
+const CAM_D_MATRIX = camMap(MATRIX_D.x, MATRIX_D.y, MATRIX_S, GIANT_D.x, GIANT_D.y, GIANT_D.s);
+const CAM_D_TINY = camMap(TINY.dx, TINY.base, TINY.s, GIANT_D.x, GIANT_D.y, GIANT_D.s);
+const CAM_K_TINY = camMap(TINY.kx, TINY.base, TINY.s, GIANT_K.x, GIANT_K.y, GIANT_K.scale);
+const CAM_K_HIT = camMap(HIT.kx, HIT.base, HIT.s, GIANT_K.x, GIANT_K.y, GIANT_K.scale);
+const GIANT_DRIFT = 0.03, HALO = (PEN_HW + GAP) / PEN_HW;
+const giantDrift = tau => 1 + GIANT_DRIFT * easeInOutSine(tau);
+
+function act3Camera(beat, tau, out) {
+  const u = easeCamera(tau);
+  if (beat === BEATS.push1) return camLerp(CAM_ID, CAM_D_MATRIX, u, out);
+  if (beat === BEATS.giantD) return camScale(CAM_D_MATRIX, giantDrift(tau), W / 2, H / 2, out);
+  if (beat === BEATS.pull1) return camLerp(camScale(CAM_D_TINY, giantDrift(1), W / 2, H / 2, camTarget), CAM_ID, u, out);
+  if (beat === BEATS.push2) return camLerp(CAM_ID, CAM_K_TINY, u, out);
+  if (beat === BEATS.giantK) return camScale(CAM_K_HIT, giantDrift(tau), W / 2, H / 2, out);
+  if (beat === BEATS.pull2) return camLerp(camScale(CAM_K_HIT, giantDrift(1), W / 2, H / 2, camTarget), CAM_ID, u, out);
+  return camCopy(CAM_ID, out);
+}
+function halftoneField(amount, cell, tone0, tone1, vertical) {
+  if (amount <= 0.001) return;
+  fx.cell = cell; fx.halftone = amount;
+  clipContent();
+  paintTone(LAYER.letters); rect(CONTENT.x0, CONTENT.y0, CONTENT.x1, CONTENT.y1, tone0 * amount, tone1 * amount, vertical);
+  unclip();
+}
+function composeHit(t) {
+  fx.inverted = 1;
+  const settle = 1 - dampedSpring(t - beatAt(BEATS.hit), REG_OMEGA, REG_ZETA);
+  fx.regX = MISREGISTER[0] * settle; fx.regY = MISREGISTER[1] * settle;
+  const s = LOCKUP.s, cut = pen.cut;
+  const bx0 = colL(8), bx1 = colR(11), by0 = rowT(1), by1 = rowB(4);
+  if (cut === CUT.none) { pen.cut = CUT.keepLeft; fx.cutX = CONTENT.x1; }
+  paintVermilion(LAYER.plate2); rect(bx0, by0, bx1, by1);
+  paintKnock(LAYER.plate2); drawGlyph(GZ, (bx0 + bx1) / 2 - GZ.cx * s, HIT.base, s);
+  pen.cut = cut;
+  paintInk(LAYER.letters);
+  drawGlyph(GK, HIT.kx, HIT.base, s);
+  drawGlyph(GD, HIT.dx, HIT.base, s);
+}
+function drawTinyLockup(weight, neighbours) {
+  paintInk(LAYER.letters); drawGlyph(GD, TINY.dx, TINY.base, TINY.s, 1, weight, true);
+  if (neighbours <= 0) return;
+  paintInk(LAYER.letters, neighbours);
+  drawGlyph(GK, TINY.kx, TINY.base, TINY.s, 1, weight, true); drawGlyph(GZ, TINY.zx, TINY.base, TINY.s, 1, weight, true);
+}
+const growIn = tau => easeInOutSine(clamp(tau / 0.8)), fadeOut = tau => 1 - easeInOutSine(clamp(tau / 0.35));
+function composeTiny(t, fade) {
+  const cx = W / 2, cy = H / 2, p = easeSettle(progress(t, beatAt(BEATS.tiny), beatAt(BEATS.tiny) + 0.3));
+  const gapX = TINY.w / 2 + 24, gapY = SCALE_TINY / 2 + 24;
+  paintInk(LAYER.construction, 0.7 * fade);
+  lineP(cx - gapX, cy, CONTENT.x0, cy, p, 0.5); lineP(cx + gapX, cy, CONTENT.x1, cy, p, 0.5);
+  lineP(cx, cy - gapY, cx, CONTENT.y0, p, 0.5); lineP(cx, cy + gapY, cx, CONTENT.y1, p, 0.5);
+}
+function composeActIII(t) {
+  const beat = Math.min(BEATS.count - 1, Math.floor((t - CUE.act3) / BEAT)), tau = clamp((t - beatAt(beat)) / BEAT);
+  if (beat === BEATS.converge) {
+    composeGrid(t, 0.2, true, true, CROSS_CLEAR.none);
+    const wipe = progress(t, CUE.rowsCut, CUE.rowsCut + CUE.rowsWipe);
+    if (wipe < 1) {
+      const edge = mix(-12, W + 12, easeWipe(wipe));
+      fx.cutX = edge; fx.cutRule = true; fx.invertX = edge;
+      pen.cut = CUT.keepRight; composeHit(t);
+      pen.cut = CUT.keepLeft;
+    }
+    permutationRows(t, true);
+    return;
+  }
+  if (beat >= BEATS.hit) { composeGrid(t, 0.2, true, true, CROSS_CLEAR.none); composeHit(t); return; }
+  if (beat < BEATS.push1) { composeGrid(t, 0.2, true, true, CROSS_CLEAR.none); permutationRows(t, false); return; }
+  act3Camera(beat, tau, camNow); act3Camera(beat, Math.max(0, tau - SHUTTER / BEAT), camPrev);
+  setMotionBlur(camNow, camPrev);
+  const u = easeCamera(tau);
+  if (beat === BEATS.push1 || beat === BEATS.giantD) {
+    const grow = beat === BEATS.giantD ? growIn(tau) : 0;
+    halftoneField(grow, 10, 0.03, 0.8, false);
+    setCamera(camNow, beat === BEATS.push1 ? SHEET_CLIP : CONTENT);
+    fx.lensZoom = MATRIX_S * camNow.z / LOCKUP.s;
+    if (beat === BEATS.push1) {
+      composeGrid(t, 0.2 * (1 - u) * (1 - u), true, true, CROSS_CLEAR.none);
+      permutationRows(beatAt(BEATS.push1) - 1e-4, false);
+      return;
+    }
+    paintKnock(LAYER.letters); drawGlyph(GD, MATRIX_D.x, MATRIX_D.y, MATRIX_S, 1, 1 + (HALO - 1) * grow, false, false);
+    paintInk(LAYER.letters); pen.seedBase = MATRIX_D.row * 7 + 3; drawGlyph(GD, MATRIX_D.x, MATRIX_D.y, MATRIX_S); pen.seedBase = 0;
+    return;
+  }
+  if (beat === BEATS.pull1 || beat === BEATS.tiny || beat === BEATS.push2) {
+    const weight = beat === BEATS.pull1 ? mix(1, TINY_WEIGHT, u) : beat === BEATS.push2 ? mix(TINY_WEIGHT, 1, u) : TINY_WEIGHT;
+    const fade = beat === BEATS.pull1 ? fadeOut(tau) : 0;
+    halftoneField(fade, 10, 0.03, 0.8, false);
+    if (beat === BEATS.push2) { fx.inverted = 1; fx.invertX = mix(W + 20, -20, easeInOutSine(progress(tau, 0.3, 0.8))); }
+    setCamera(camNow, CONTENT);
+    fx.lensZoom = TINY.s * camNow.z / LOCKUP.s;
+    if (beat !== BEATS.pull1) composeTiny(t, beat === BEATS.tiny ? 1 : 1 - clamp(tau * 3));
+    if (fade > 0) { paintKnock(LAYER.letters); drawGlyph(GD, TINY.dx, TINY.base, TINY.s, 1, 1 + (HALO - 1) * fade, false, false); }
+    drawTinyLockup(weight, beat === BEATS.pull1 ? easeInOutSine(clamp(tau / 0.55)) : 1);
+    if (beat === BEATS.tiny) {
+      clearCamera();
+      paintInk(LAYER.meta, 0.94);
+      label(COPY.tinyScale, W / 2 + 18, H / 2 + 46, 12, beatAt(BEATS.tiny));
+      paintInk(LAYER.meta, 0.6);
+      label(COPY.tinyNote, W / 2 + 18, H / 2 + 66, 10, beatAt(BEATS.tiny) + 0.03);
+    }
+    return;
+  }
+  fx.inverted = 1;
+  const grow = beat === BEATS.giantK ? growIn(tau) : fadeOut(tau);
+  halftoneField(grow, 24, 0.86, 0.04, true);
+  setCamera(camNow, CONTENT);
+  fx.lensZoom = camNow.z;
+  if (beat === BEATS.pull2) composeGrid(t, 0.2 * u * u, true, false, CROSS_CLEAR.none);
+  if (grow > 0) { paintKnock(LAYER.letters); drawGlyph(GK, HIT.kx, HIT.base, HIT.s, 1, 1 + (HALO - 1) * grow, false, false); }
+  paintInk(LAYER.letters); drawGlyph(GK, HIT.kx, HIT.base, HIT.s);
+  if (beat === BEATS.pull2) drawGlyph(GD, HIT.dx, HIT.base, HIT.s);
+}
+
+const VALUE_X = i => colL(i) + TEXT_INSET, VALUE_LABEL_Y = rowT(5) + 18, VALUE_Y = rowT(5) + 56;
+const VALUES_RIGHT = VALUE_X(VALUES.length - 1) + Math.max(textWidth(VALUES[VALUES.length - 1][0], VALUES[VALUES.length - 1][0].length, 10), textWidth(VALUES[VALUES.length - 1][1], VALUES[VALUES.length - 1][1].length, 24));
+const NOTES_X = colL(8) + TEXT_INSET, NOTES_Y = rowT(4) + 30, NOTES_LEAD = 18;
+const NOTES_W = Math.max(blockWidth(NOTES, 10), textWidth(COPY.notesHead, COPY.notesHead.length, 12));
+function composeActIV(t) {
+  composeGrid(t, 0.26, true, true, CROSS_CLEAR.lockup | CROSS_CLEAR.labels);
+  const breath = t < CUE.breathe ? 0 : Math.sin((t - CUE.breathe) * TAU / CUE.breathPeriod);
+  composeConstruction(t - CUE.act4Construct, BREATH.alpha + BREATH.depth * breath, true);
+  const reveal = progress(t, CUE.act4, CUE.act4 + CUE.lockupReveal);
+  if (reveal < 1) {
+    const edge = mix(colL(0) - 12, CONTENT.x1 + 12, easeWipe(reveal));
+    fx.cutX = edge; pen.cut = CUT.keepRight; permutationRows(t, true); pen.cut = CUT.none;
+    paintInk(LAYER.letters); clip(0, 0, edge, H); drawSheetLockup(); unclip();
+    paintInk(LAYER.letters, 0.8); seg(edge, CONTENT.y0, edge, CONTENT.y1, 0.6);
+    return;
+  }
+  paintInk(LAYER.letters); drawSheetLockup();
+  if (t < CUE.act4Dims) return;
+  dimsK(CUE.kDims4, false); dimsZ(CUE.zDims4); dimsChain(CUE.chain4); dimsGap(CUE.gap4);
+  composeValues(CUE.values);
+  composeNotes(CUE.notes);
+  composeTitleBlock(t);
+  composeCursor(t);
+}
+function composeValues(t0) {
+  if (fx.time < t0) return;
+  paintInk(LAYER.meta);
+  knockBlock(VALUE_X(0), VALUE_LABEL_Y - 10, VALUES_RIGHT, rowB(5) - TEXT_PAD - 2);
+  for (let i = 0; i < VALUES.length; i++) {
+    const x = VALUE_X(i), rt = t0 + i * 0.06;
+    paintInk(LAYER.meta, 0.58); label(VALUES[i][0], x, VALUE_LABEL_Y, 10, rt);
+    paintInk(LAYER.meta, 1); label(VALUES[i][1], x, VALUE_Y, 24, rt + 0.04);
+  }
+}
+function composeNotes(t0) {
+  if (fx.time < t0) return;
+  let shown = 0;
+  while (shown < NOTES.length && fx.time >= t0 + 0.06 + shown * 0.06) shown++;
+  paintInk(LAYER.meta, 0.94);
+  knockBlock(NOTES_X, LOCKUP.base + 8, NOTES_X + NOTES_W, NOTES_Y + (shown ? 4 + shown * NOTES_LEAD : 2));
+  label(COPY.notesHead, NOTES_X, NOTES_Y, 12, t0);
+  for (let i = 0; i < NOTES.length; i++) label(NOTES[i], NOTES_X, NOTES_Y + 22 + i * NOTES_LEAD, 10, t0 + 0.06 + i * 0.06);
+}
+function composeTitleBlock(t) {
+  const x0 = colL(8), x1 = colR(11), y0 = rowT(5), y1 = rowB(5), h = (y1 - y0) / 3, xa = x0 + 276, xb = x0 + 414;
+  const p = easeSettle(progress(t, CUE.titleBlock, CUE.titleBlock + 0.6));
+  if (p <= 0) return;
+  paintInk(LAYER.meta, 0.8);
+  knockBox(x0, y0, x0 + (x1 - x0) * p, y1);
+  lineP(x0, y0, x1, y0, p, 0.6); lineP(x0, y1, x1, y1, p, 0.6);
+  lineP(x0, y0 + h, x1, y0 + h, p, 0.45); lineP(x0, y0 + 2 * h, x1, y0 + 2 * h, p, 0.45);
+  lineP(xa, y0, xa, y0 + 2 * h, p, 0.45); lineP(xb, y0, xb, y0 + h, p, 0.45);
+  for (let i = 0; i < TITLE_BLOCK.length; i++) {
+    const c = TITLE_BLOCK[i], cx = x0 + c[0] + 8, cy = y0 + c[1] * h, rt = CUE.titleBlock + 0.2 + i * 0.05;
+    paintInk(LAYER.meta, 0.58); label(c[2], cx, cy + 16, 10, rt);
+    paintInk(LAYER.meta, 0.96); label(c[3], cx, cy + 37, 13, rt + 0.05);
+  }
+}
+function composeCursor(t) {
+  const cp = progress(t, CUE.cursor, CUE.cursorEnd);
+  if (cp <= 0 || cp >= 1) return;
+  const x = mix(colL(0), colR(7), easeInOutSine(cp)), a = CURSOR_ALPHA * Math.min(1, (t - CUE.cursor) / CUE.cursorFade, (CUE.cursorEnd - t) / CUE.cursorFade);
+  paintInk(LAYER.construction, a); seg(x, rowB(0) - 88, x, LOCKUP.base + 16, 0.5);
+  paintInk(LAYER.meta, a);
+  nbReset(); nbText('X '); nbSigned((x - LOCKUP.kx) / LOCKUP.s, 4, 0); nbDraw(x + 8, rowB(0) - 76, 10);
+}
+
+/* ── composition: frame, header, footer ─────────────────── */
+function composeFrame(t, cycle) {
+  unclip(); resetView(); pen.cut = CUT.none;
+  paintInk(LAYER.marks, 0.9);
+  for (let i = 0; i < 4; i++) {
+    const sx = i & 1 ? 1 : -1, sy = i & 2 ? 1 : -1, x = i & 1 ? W - 60 : 60, y = i & 2 ? H - 44 : 44;
+    seg(x + sx * 8, y, x + sx * 30, y, 0.6); seg(x, y + sy * 8, x, y + sy * 30, 0.6);
+  }
+  for (let i = 0; i < 2; i++) {
+    const x = i ? W - 54 : 54;
+    arc(x, H / 2, 8, 0, TAU, 0.6); seg(x - 13, H / 2, x + 13, H / 2, 0.6); seg(x, H / 2 - 13, x, H / 2 + 13, 0.6);
+  }
+  if (fx.cutRule && fx.cutX < CONTENT.x1 + 12 && fx.cutX > CONTENT.x0 - 12) {
+    paintInk(LAYER.fixed, 0.8); seg(fx.cutX, CONTENT.y0, fx.cutX, CONTENT.y1, 0.6);
+  }
+  let h = 0;
+  for (let i = 1; i < HEADER.length; i++) if (cycle >= HEADER[i].at) h = i;
+  paintInk(LAYER.meta, 0.94);
+  label(COPY.header, colL(0), 58, 12);
+  label(HEADER[h].caption, colL(4), 58, 12);
+  label(HEADER[h].act, colR(11), 58, 12, STATIC, 1);
+  if (cycle >= CUE.titleBlock) label(COPY.footerScale, colL(0), 1034, 12, CUE.titleBlock);
+  else label(COPY.footer, colL(0), 1034, 12, CUE.lead - DURATION);
+  nbReset(); nbText('PARALLAX X'); nbSigned(parallax.x, 1, 2); nbText(' Y'); nbSigned(parallax.y, 1, 2); nbDraw(colL(4), 1034, 12);
+  nbReset();
+  if (cycle >= CUE.act3 && cycle < CUE.act4) { nbText('BEAT '); nbInt(Math.min(BEATS.count - 1, Math.floor((cycle - CUE.act3) / BEAT)) + 1, 1); nbText(COPY.beatTail); nbDraw(colL(8), 1034, 12); }
+  else label(COPY.loop, colL(8), 1034, 12);
+  const frames = Math.floor(t * 25);
+  nbReset(); nbText('TC 00:00:'); nbInt(frames / 25, 2); nbText(':'); nbInt(frames % 25, 2); nbDraw(colR(11), 1034, 12, 1);
+}
+function composeNumeral(t, cycle) {
+  const act = cycle < CUE.act2 ? 0 : cycle < CUE.act3 ? 1 : cycle < CUE.act4 ? 2 : 3;
+  if (fx.halftone > 0) { paintKnock(LAYER.letters); rect(colL(11), CONTENT.y0, CONTENT.x1, rowB(0)); }
+  paintInk(LAYER.meta, 0.94);
+  label(NUMERALS[act], colR(11) - TEXT_INSET, rowB(0) - 8, 36, STATIC, 1);
+}
+
+const exitEdge = t => {
+  const p = progress(t, CUE.exit, CUE.exitEnd);
+  return p >= 1 ? -1e5 : mix(CONTENT.x1 + 12, CONTENT.x0 - 12, easeWipe(p));
+};
+
+function compose(t) {
+  const cycle = t >= CUE.lead ? t - DURATION : t, exiting = t >= CUE.exit && t < CUE.lead;
+  beginFrame(cycle);
+  if (exiting) { fx.cutX = exitEdge(t); fx.cutRule = true; pen.cut = CUT.keepLeft; }
+  if (cycle < CUE.act2) composeActI(cycle);
+  else if (t < CUE.triptych) composeActII(t);
+  else if (t < CUE.act3) composeTriptych(t);
+  else if (t < CUE.act4) composeActIII(t);
+  else composeActIV(t);
+  const steady = (1 - fx.halftone) * (1 - fx.halftone);
+  fx.blurA *= steady; fx.blurBx *= steady; fx.blurBy *= steady;
+  clearCamera();
+  pen.cut = exiting ? CUT.keepLeft : CUT.none;
+  composeNumeral(t, cycle);
+  composeFrame(t, cycle);
+}
+
+/* ── renderer: shaders ──────────────────────────────────── */
+const VS_PRIM = `#version 300 es
+layout(location=0) in vec2 aCorner;
+layout(location=1) in vec4 aGeom;
+layout(location=2) in vec4 aParam;
+layout(location=3) in vec4 aPaint;
+layout(location=4) in vec4 aClip;
+uniform vec2 uOffset[8];
+uniform float uPx;
+flat out vec4 vGeom; flat out vec4 vParam; flat out vec4 vPaint; flat out vec4 vClip; flat out float vCut; flat out float vTexture;
+out vec2 vPos; out float vScreenX;
+const float TAU = 6.28318531;
+bool inSweep(float a, float a0, float a1) { return a0 + mod(a - a0, TAU) <= a1; }
+void main() {
+  float code = aParam.w;
+  float seed = floor(code / 2048. + .001);
+  code -= seed * 2048.;
+  float textured = floor(code / 1024. + .001);
+  code -= textured * 1024.;
+  float cutMode = floor(code / 256. + .001);
+  code -= cutMode * 256.;
+  float kind = floor(code / 16. + .001);
+  int layer = int(code - kind * 16. + .5);
+  float pad = aParam.z + 2. * uPx;
+  vec2 p;
+  if (kind < .5) {
+    vec2 d = aGeom.zw - aGeom.xy; float l = length(d);
+    vec2 u = l > 1e-5 ? d / l : vec2(1., 0.), n = vec2(-u.y, u.x);
+    p = aGeom.xy + u * mix(-pad, l + pad, aCorner.x) + n * mix(-pad, pad, aCorner.y);
+  } else if (kind < 1.5) {
+    vec2 c = aGeom.xy; float r = aGeom.z;
+    vec2 e0 = c + r * vec2(cos(aParam.x), sin(aParam.x)), e1 = c + r * vec2(cos(aParam.y), sin(aParam.y));
+    vec2 lo = min(e0, e1), hi = max(e0, e1);
+    for (int k = 0; k < 4; k++) {
+      float a = float(k) * TAU * .25;
+      if (inSweep(a, aParam.x, aParam.y)) { vec2 q = c + r * vec2(cos(a), sin(a)); lo = min(lo, q); hi = max(hi, q); }
+    }
+    lo = max(lo - pad, aClip.xy - uPx); hi = min(hi + pad, aClip.zw + uPx);
+    p = mix(lo, hi, aCorner);
+  } else {
+    vec2 lo = max(aGeom.xy, aClip.xy) - uPx, hi = min(aGeom.zw, aClip.zw) + uPx;
+    p = mix(lo, hi, aCorner);
+  }
+  vGeom = aGeom; vParam = aParam; vPaint = aPaint; vClip = aClip; vCut = cutMode; vPos = p;
+  vTexture = textured > .5 ? seed + 1. : 0.;
+  vec2 screen = p + uOffset[layer];
+  vScreenX = screen.x;
+  vec2 ndc = screen / vec2(1920., 1080.);
+  gl_Position = vec4(ndc.x * 2. - 1., 1. - ndc.y * 2., 0., 1.);
+}`;
+const FS_PRIM = textured => `#version 300 es
+${textured ? '#define TEXTURED' : ''}
+precision highp float;
+flat in vec4 vGeom; flat in vec4 vParam; flat in vec4 vPaint; flat in vec4 vClip; flat in float vCut; flat in float vTexture;
+in vec2 vPos; in float vScreenX;
+uniform float uPx, uKnock, uCutX;
+out vec4 o;
+const float TAU = 6.28318531, PEN = ${PEN_HW}.;
+float sdSegment(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-8), 0., 1.); return length(pa - ba * h); }
+float stroke(float d, float hw) { float he = max(hw, .5 * uPx); return clamp((he - d) / uPx + .5, 0., 1.) * hw / he; }
+#ifdef TEXTURED
+float hash(vec2 p) { vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+vec2 gradient(vec2 i) { float a = hash(i) * TAU; return vec2(cos(a), sin(a)); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6. - 15.) + 10.);
+  return mix(mix(dot(gradient(i), f), dot(gradient(i + vec2(1., 0.)), f - vec2(1., 0.)), u.x),
+             mix(dot(gradient(i + vec2(0., 1.)), f - vec2(0., 1.)), dot(gradient(i + 1.), f - 1.), u.x), u.y);
+}
+float pores(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  float h = hash(i + 7.31);
+  vec2 c = vec2(hash(i + 1.7), hash(i + 9.2)) * .6 + .2;
+  return h > .82 ? 1. - smoothstep(.06, .06 + .12 * (h - .82) / .18 + .06, length(f - c)) : 0.;
+}
+float edgeGrain(vec2 st, vec2 sd) { return noise(st * .12 + sd) * 1. + noise(st * .55 + sd.yx) * .32; }
+float inkDensity(vec2 st, float axis, float fp, vec2 sd) {
+  float fine = smoothstep(1.3, .55, fp), mid = smoothstep(3.5, 1.6, fp);
+  float streaks = noise(vec2(st.x * .008, st.y * .16) + sd) * mid * .45 + noise(vec2(st.x * .02, st.y * .62) + sd.yx) * fine;
+  float mottle = noise(st / 34. + sd * 1.7);
+  float voids = pores(st / 7. + sd) * fine;
+  float density = .968 + .03 * mottle + .06 * streaks - .22 * voids;
+  return clamp(mix(density, 1., (1. - smoothstep(.8, 4., PEN - axis)) * .85), .6, 1.);
+}
+#endif
+void main() {
+  float kind = floor(mod(vParam.w, 256.) / 16. + .001), cov, tone = 1., density = 1.;
+#ifdef TEXTURED
+  bool textured = vTexture > .5 && kind < 1.5;
+  float fu = PEN / max(vParam.z, 1e-5), fp = uPx * fu;
+  vec2 sd = vec2(vTexture * 17.13, vTexture * 5.71);
+#endif
+  if (kind < .5) {
+    float d = sdSegment(vPos, vGeom.xy, vGeom.zw);
+#ifdef TEXTURED
+    if (textured) {
+      vec2 ab = vGeom.zw - vGeom.xy, u = length(ab) > 1e-5 ? normalize(ab) : vec2(1., 0.), rel = vPos - vGeom.xy;
+      vec2 st = vec2(dot(rel, u), dot(rel, vec2(-u.y, u.x))) * fu;
+      density = inkDensity(st, d * fu, fp, sd);
+      d -= edgeGrain(st, sd) / fu;
+    }
+#endif
+    cov = stroke(d, vParam.z);
+  } else if (kind < 1.5) {
+    vec2 q = vPos - vGeom.xy; float a = atan(q.y, q.x), sweep = mod(a - vParam.x, TAU), d;
+    if (vParam.x + sweep <= vParam.y) d = abs(length(q) - vGeom.z);
+    else d = min(length(q - vGeom.z * vec2(cos(vParam.x), sin(vParam.x))), length(q - vGeom.z * vec2(cos(vParam.y), sin(vParam.y))));
+#ifdef TEXTURED
+    if (textured) {
+      float span = vParam.y - vParam.x;
+      vec2 st = vec2((sweep > span + .5 * (TAU - span) ? sweep - TAU : sweep) * vGeom.z, length(q) - vGeom.z) * fu;
+      density = inkDensity(st, d * fu, fp, sd);
+      d -= edgeGrain(st, sd) / fu;
+    }
+#endif
+    cov = stroke(d, vParam.z);
+  } else {
+    vec2 c = (vGeom.xy + vGeom.zw) * .5, h = (vGeom.zw - vGeom.xy) * .5, q = abs(vPos - c) - h;
+    cov = clamp(.5 - (length(max(q, 0.)) + min(max(q.x, q.y), 0.)) / uPx, 0., 1.);
+    float g = kind < 2.5 ? (vPos.x - vGeom.x) / (vGeom.z - vGeom.x) : (vPos.y - vGeom.y) / (vGeom.w - vGeom.y);
+    tone = mix(vParam.x, vParam.y, clamp(g, 0., 1.));
+  }
+  vec2 k = min(vPos - vClip.xy, vClip.zw - vPos);
+  cov *= clamp(min(k.x, k.y) / uPx + .5, 0., 1.) * vPaint.w;
+  if (vCut > 1.5) cov *= clamp((vScreenX - uCutX) / uPx + .5, 0., 1.);
+  else if (vCut > .5) cov *= clamp((uCutX - vScreenX) / uPx + .5, 0., 1.);
+  if (cov < .002) discard;
+  o = uKnock < .5 ? vec4(vPaint.x, vPaint.y, vPaint.z * tone, 1.) * cov * density : vec4(1. - cov * mix(1., density, .6));
+}`;
+const VS_FULL = `#version 300 es
+out vec2 vUv;
+void main() { vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); vUv = p; gl_Position = vec4(p * 2. - 1., 0., 1.); }`;
+const FS_BAKE = `#version 300 es
+precision highp float;
+out vec4 o;
+float hash(vec2 p) { vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+float tile(vec2 p, float period) {
+  vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
+  vec2 a = mod(i, period), b = mod(i + 1., period);
+  return mix(mix(hash(a), hash(vec2(b.x, a.y)), f.x), mix(hash(vec2(a.x, b.y)), hash(b), f.x), f.y);
+}
+void main() {
+  vec2 uv = gl_FragCoord.xy / 512.;
+  float tooth = 0., norm = 0., amp = 1.;
+  for (int i = 0; i < 4; i++) { float period = 64. * exp2(float(i)); tooth += amp * tile(uv * period, period); norm += amp; amp *= .6; }
+  tooth /= norm;
+  vec2 w1 = 3. * vec2(tile(uv * 8., 8.), tile(uv * 8. + 4.3, 8.));
+  vec2 w2 = 2. * vec2(tile(uv * 6. + 1.7, 6.), tile(uv * 6. + 9.1, 6.));
+  float r1 = 1. - abs(2. * tile(uv * 24. + w1, 24.) - 1.);
+  float r2 = 1. - abs(2. * tile(uv * 40. + w2, 40.) - 1.);
+  float fibre = max(pow(r1, 20.), .7 * pow(r2, 24.));
+  float grain = tile(uv * 256., 256.);
+  float formation = tile(uv * 4., 4.) * .6 + tile(uv * 12., 12.) * .4;
+  o = vec4(tooth, fibre, grain, formation);
+}`;
+const FS_PRINT = `#version 300 es
+precision highp float;
+uniform sampler2D uScene, uPaper;
+uniform vec2 uPaperOffset;
+uniform vec3 uPaperCam, uPanelCam[3];
+uniform vec4 uPanelRect[3];
+uniform float uCell, uInverted, uInvertX, uPx, uLoupeOn;
+uniform vec3 uInk, uBone, uVerm;
+in vec2 vUv;
+out vec4 o;
+void main() {
+  vec4 s = texture(uScene, vUv);
+  vec2 p = vec2(vUv.x, 1. - vUv.y) * vec2(1920., 1080.);
+  vec2 g = mat2(.70710678, .70710678, -.70710678, .70710678) * p / uCell;
+  float spot = .5 + .25 * (1.14 * cos(6.28318531 * g.x) + .86 * cos(6.28318531 * g.y));
+  float tone = s.b + .16 * s.b * (1. - s.b);
+  float aa = fwidth(spot) * .7 + 1e-4;
+  float dots = smoothstep(1. - tone - aa, 1. - tone + aa, spot) * step(.004, s.b);
+  dots = mix(tone, dots, smoothstep(3., 6., uCell / uPx));
+  vec3 cam = uPaperCam;
+  for (int i = 0; i < 3; i++) { vec4 r = uPanelRect[i]; if (p.x >= r.x && p.x < r.z && p.y >= r.y && p.y < r.w) cam = uPanelCam[i]; }
+  vec2 q = (p - uPaperOffset - cam.yz) / cam.x / ${PAPER_TILE}.;
+  vec4 n1 = texture(uPaper, q);
+  vec4 n2 = texture(uPaper, mat2(.8, .6, -.6, .8) * q * 1.37 + .31);
+  float tooth = (n1.r - .5) + .7 * (n2.b - .5), fibre = max(n1.g, .8 * n2.g);
+  if (uLoupeOn > .5) {
+    float loupe = clamp((cam.x - 1.) * .5, 0., 1.);
+    vec4 n3 = texture(uPaper, mat2(.6, -.8, .8, .6) * q * 5.3 + .17), n4 = texture(uPaper, q * 12.9 + .61);
+    tooth += loupe * (.8 * (n3.r - .5) + .6 * (n4.b - .5));
+    fibre = max(fibre, loupe * .75 * n3.g);
+  }
+  float formation = (n1.a + n2.a) * .5 - .5;
+  vec3 bone = uBone * (1. + .045 * tooth - .02 * fibre + .045 * formation);
+  vec3 inkStock = uInk * (1. + .45 * tooth + .5 * formation) + .006 * fibre;
+  float inverted = uInverted * clamp((p.x - uInvertX) / uPx + .5, 0., 1.);
+  vec3 paper = mix(bone, inkStock, inverted);
+  vec3 inkColor = mix(uInk, uBone * (1. + .03 * tooth), inverted);
+  float inkAmt = max(s.r, dots) * (1. - .06 * clamp(tooth * 2., 0., 1.));
+  vec3 c = mix(paper, inkColor, inkAmt);
+  c = mix(c, uVerm * (1. + .04 * tooth + .03 * formation), s.g);
+  o = vec4(c, 1.);
+}`;
+const FS_LENS = `#version 300 es
+precision highp float;
+uniform sampler2D uImage;
+uniform float uK, uCA, uLoupe;
+uniform vec2 uSize;
+uniform vec3 uBlur;
+uniform vec4 uExempt;
+uniform vec3 uWeights[12];
+uniform int uTaps, uBlurTaps;
+uniform float uMotion;
+in vec2 vUv;
+out vec4 o;
+void main() {
+  vec2 d = vUv - .5, a = d * vec2(1.77777778, 1.), e = abs(d);
+  float r2 = dot(a, a) / 1.0401235;
+  vec2 inLo = smoothstep(uExempt.xy - .012, uExempt.xy, vUv), inHi = 1. - smoothstep(uExempt.zw, uExempt.zw + .012, vUv);
+  float field = (1. - smoothstep(.43, .445, max(e.x, e.y))) * (1. - inLo.x * inLo.y * inHi.x * inHi.y);
+  float base = (1. + uK * r2) / (1. + uK), spread = (uCA + uLoupe * field) * r2 * r2;
+  float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
+  vec3 c = vec3(0.);
+  vec2 v = uMotion > .5 ? (vec2(vUv.x, 1. - vUv.y) * vec2(1920., 1080.) * uBlur.x + uBlur.yz) * field : vec2(0.);
+  float blurPx = length(v) * uSize.x / 1920.;
+  if (blurPx > 1.) {
+    vec2 blur = vec2(v.x / 1920., -v.y / 1080.);
+    float ft = float(uBlurTaps), shuffle = fract(n * 7.31 + .37), neutral = clamp(blurPx * .25, 0., 1.);
+    vec3 weight = vec3(0.);
+    for (int i = 0; i < 16; i++) {
+      if (i >= uBlurTaps) break;
+      float fi = float(i), u = (fi + n) / ft, b = (mod(fi * 5., ft) + shuffle) / ft - .5;
+      vec3 w = mix(uWeights[int(u * 6. + .5)], vec3(1. / 7.), neutral);
+      c += texture(uImage, .5 + d * (base + spread * (2. * u - 1.)) + blur * b).rgb * w; weight += w;
+    }
+    c /= weight;
+  } else if (spread * length(d * uSize) < .5) c = texture(uImage, .5 + d * base).rgb;
+  else {
+    float last = float(uTaps - 1);
+    int first = uTaps == 7 ? 0 : 7;
+    for (int i = 0; i < 7; i++) {
+      if (i >= uTaps) break;
+      c += texture(uImage, .5 + d * (base + spread * (2. * float(i) / last - 1.))).rgb * uWeights[first + i];
+    }
+  }
+  o = vec4(c + (n - .5) / 255., 1.);
+}`;
+
+/* ── renderer: GL state ─────────────────────────────────── */
+const canvas = document.getElementById('kdz');
+const view = { dpr: 1, cw: 1, ch: 1, sx: 0, sy: 0, sw: 1, sh: 1, fw: 0, fh: 0, scale: 1, cssX: 0, cssY: 0, cssW: 1, cssH: 1, dirty: true };
+const offsets = new Float32Array(16);
+const LENS_TAPS_FULL = 7, LENS_TAPS_REDUCED = 5, BLUR_TAPS_FULL = 16, BLUR_TAPS_REDUCED = 9, LENS_FULL_SCALE = 0.9;
+const SPECTRAL_WEIGHTS = (() => {
+  const curves = [[0, 0, 0.04, 0.18, 0.55, 1, 0.8], [0, 0.25, 0.8, 1, 0.7, 0.2, 0], [0.75, 1, 0.6, 0.15, 0, 0, 0]];
+  const out = new Float32Array(3 * (LENS_TAPS_FULL + LENS_TAPS_REDUCED));
+  const sample = (curve, u) => { const f = u * (LENS_TAPS_FULL - 1), i = Math.min(LENS_TAPS_FULL - 2, Math.floor(f)); return mix(curve[i], curve[i + 1], f - i); };
+  const fill = (taps, first) => curves.forEach((curve, c) => {
+    const w = Array.from({ length: taps }, (_, i) => sample(curve, i / (taps - 1))), sum = w.reduce((x, y) => x + y);
+    w.forEach((v, i) => { out[(first + i) * 3 + c] = v / sum; });
+  });
+  fill(LENS_TAPS_FULL, 0); fill(LENS_TAPS_REDUCED, LENS_TAPS_FULL);
+  return out;
+})();
+let gl = null, renderer = null;
+const timer = { ext: null, queries: [], busy: new Uint8Array(4), head: 0, gpuMs: 0, at: -1e9 };
+
+function compile(type, src, name) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src); gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS) && !gl.isContextLost()) throw new Error('KDZ: shader "' + name + '" failed to compile:\n' + gl.getShaderInfoLog(sh));
+  return sh;
+}
+function program(vs, fs, name, uniforms) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs, name + '.vert'));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs, name + '.frag'));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS) && !gl.isContextLost()) throw new Error('KDZ: program "' + name + '" failed to link:\n' + gl.getProgramInfoLog(p));
+  const u = {};
+  for (const n of uniforms) u[n] = gl.getUniformLocation(p, n);
+  return { p, u };
+}
+function renderTarget(w, h) {
+  const tex = gl.createTexture(), fbo = gl.createFramebuffer();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  return { tex, fbo };
+}
+function releaseTarget(t) { if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); } }
+function bakePaper() {
+  const tex = gl.createTexture(), fbo = gl.createFramebuffer();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texStorage2D(gl.TEXTURE_2D, 10, gl.RGBA8, 512, 512);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.viewport(0, 0, 512, 512);
+  gl.useProgram(renderer.bake.p); gl.bindVertexArray(renderer.emptyVao);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(fbo);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  return tex;
+}
+function initGL() {
+  gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
+  if (!gl) return false;
+  renderer = {
+    prim: program(VS_PRIM, FS_PRIM(false), 'primitive', ['uOffset', 'uPx', 'uKnock', 'uCutX']),
+    primInk: program(VS_PRIM, FS_PRIM(true), 'primitive.ink', ['uOffset', 'uPx', 'uKnock', 'uCutX']),
+    print: program(VS_FULL, FS_PRINT, 'print', ['uScene', 'uPaper', 'uPaperOffset', 'uPaperCam', 'uPanelRect', 'uPanelCam', 'uCell', 'uInverted', 'uInvertX', 'uPx', 'uLoupeOn', 'uInk', 'uBone', 'uVerm']),
+    lens: program(VS_FULL, FS_LENS, 'lens', ['uImage', 'uK', 'uCA', 'uLoupe', 'uSize', 'uBlur', 'uMotion', 'uWeights', 'uTaps', 'uBlurTaps', 'uExempt']),
+    bake: program(VS_FULL, FS_BAKE, 'paper', []),
+    primVao: gl.createVertexArray(), emptyVao: gl.createVertexArray(), instances: gl.createBuffer(),
+    scene: null, printed: null, paper: null
+  };
+  gl.bindVertexArray(renderer.primVao);
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, renderer.instances);
+  gl.bufferData(gl.ARRAY_BUFFER, prim.byteLength, gl.DYNAMIC_DRAW);
+  for (let a = 1; a <= 4; a++) { gl.enableVertexAttribArray(a); gl.vertexAttribDivisor(a, 1); gl.vertexAttribPointer(a, 4, gl.FLOAT, false, STRIDE * 4, (a - 1) * 16); }
+  gl.bindVertexArray(null);
+  renderer.paper = bakePaper();
+  gl.useProgram(renderer.print.p);
+  gl.uniform1i(renderer.print.u.uScene, 0); gl.uniform1i(renderer.print.u.uPaper, 1);
+  gl.uniform3fv(renderer.print.u.uInk, INK); gl.uniform3fv(renderer.print.u.uBone, BONE); gl.uniform3fv(renderer.print.u.uVerm, VERMILION);
+  gl.useProgram(renderer.lens.p);
+  gl.uniform1i(renderer.lens.u.uImage, 0); gl.uniform3fv(renderer.lens.u.uWeights, SPECTRAL_WEIGHTS);
+  gl.uniform1f(renderer.lens.u.uK, LENS.k); gl.uniform1f(renderer.lens.u.uCA, LENS.ca);
+  gl.uniform4f(renderer.lens.u.uExempt, colL(11) / W, 1 - rowB(0) / H, CONTENT.x1 / W, 1 - CONTENT.y0 / H);
+  timer.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  timer.queries.length = 0; timer.busy.fill(0); timer.head = 0; timer.gpuMs = 0; timer.at = -1e9;
+  if (timer.ext) for (let i = 0; i < 4; i++) timer.queries.push(gl.createQuery());
+  view.fw = view.fh = 0; view.dirty = true; clock.stillDrawn = false;
+  return true;
+}
+function layout() {
+  view.dirty = false;
+  view.dpr = Math.min(2, window.devicePixelRatio || 1);
+  const cssW = Math.max(1, window.innerWidth), cssH = Math.max(1, window.innerHeight);
+  view.cw = Math.max(1, Math.round(cssW * view.dpr)); view.ch = Math.max(1, Math.round(cssH * view.dpr));
+  if (canvas.width !== view.cw || canvas.height !== view.ch) { canvas.width = view.cw; canvas.height = view.ch; }
+  const k = Math.min(view.cw / W, view.ch / H);
+  view.sw = Math.max(16, Math.round(W * k)); view.sh = Math.max(9, Math.round(H * k));
+  view.sx = Math.floor((view.cw - view.sw) / 2); view.sy = Math.floor((view.ch - view.sh) / 2);
+  view.cssX = view.sx / view.dpr; view.cssY = view.sy / view.dpr; view.cssW = view.sw / view.dpr; view.cssH = view.sh / view.dpr;
+  const budgetScale = clamp(Math.floor(10 * Math.sqrt(PIXEL_BUDGET / (view.sw * view.sh))) / 10, SCALE_MIN, 1);
+  resetQuality(performance.now());
+  quality.liveScale = quality.sized ? Math.min(quality.liveScale, budgetScale) : budgetScale;
+  quality.sized = true; clock.stillDrawn = false;
+  sizeTargets();
+}
+function sizeTargets() {
+  const w = Math.max(16, Math.round(view.sw * view.scale)), h = Math.max(9, Math.round(view.sh * view.scale));
+  if (w === view.fw && h === view.fh && renderer.scene) return;
+  releaseTarget(renderer.scene); releaseTarget(renderer.printed);
+  view.fw = w; view.fh = h;
+  renderer.scene = renderTarget(w, h); renderer.printed = renderTarget(w, h);
+}
+function setScale(s) { if (s !== view.scale) { view.scale = s; sizeTargets(); } }
+
+function timerBegin() {
+  if (!timer.ext || timer.busy[timer.head]) return -1;
+  gl.beginQuery(timer.ext.TIME_ELAPSED_EXT, timer.queries[timer.head]);
+  return timer.head;
+}
+function timerEnd(i) {
+  if (i < 0) return;
+  gl.endQuery(timer.ext.TIME_ELAPSED_EXT);
+  timer.busy[i] = 1; timer.head = (i + 1) & 3;
+}
+function timerPoll() {
+  if (!timer.ext) return;
+  const disjoint = gl.getParameter(timer.ext.GPU_DISJOINT_EXT);
+  for (let i = 0; i < 4; i++) {
+    if (!timer.busy[i] || !gl.getQueryParameter(timer.queries[i], gl.QUERY_RESULT_AVAILABLE)) continue;
+    const ns = gl.getQueryParameter(timer.queries[i], gl.QUERY_RESULT);
+    timer.busy[i] = 0;
+    if (!disjoint) { timer.gpuMs = ns / 1e6; timer.at = performance.now(); }
+  }
+}
+
+function render() {
+  const px = H / view.fh;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.scene.fbo); gl.viewport(0, 0, view.fw, view.fh);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  for (let k = 0; k < 2; k++) {
+    const pr = k ? renderer.primInk : renderer.prim;
+    gl.useProgram(pr.p);
+    gl.uniform2fv(pr.u.uOffset, offsets); gl.uniform1f(pr.u.uPx, px); gl.uniform1f(pr.u.uCutX, fx.cutX);
+  }
+  let active = renderer.primInk;
+  gl.bindVertexArray(renderer.primVao); gl.bindBuffer(gl.ARRAY_BUFFER, renderer.instances);
+  for (let i = 0; i < 3; i++) {
+    const st = streams[i];
+    if (st.count) gl.bufferSubData(gl.ARRAY_BUFFER, st.base * STRIDE * 4, prim, st.base * STRIDE, st.count * STRIDE);
+  }
+  gl.enable(gl.BLEND);
+  for (let i = 0; i < 3; i++) {
+    const st = streams[i];
+    for (let r = 0; r < st.runs; r++) {
+      const first = st.base + st.runStart[r], end = st.base + (r + 1 < st.runs ? st.runStart[r + 1] : st.count);
+      const pr = st.runTextured[r] ? renderer.primInk : renderer.prim;
+      if (pr !== active) { gl.useProgram(pr.p); active = pr; }
+      gl.blendEquation(st.runKnock[r] ? gl.MIN : gl.MAX); gl.uniform1f(pr.u.uKnock, st.runKnock[r]);
+      for (let a = 1; a <= 4; a++) gl.vertexAttribPointer(a, 4, gl.FLOAT, false, STRIDE * 4, first * STRIDE * 4 + (a - 1) * 16);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, end - first);
+    }
+  }
+  gl.disable(gl.BLEND);
+  gl.bindVertexArray(renderer.emptyVao);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.printed.fbo);
+  gl.useProgram(renderer.print.p);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, renderer.paper);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, renderer.scene.tex);
+  gl.uniform2f(renderer.print.u.uPaperOffset, offsets[0], offsets[1]); gl.uniform1f(renderer.print.u.uCell, fx.cell);
+  gl.uniform1f(renderer.print.u.uInverted, fx.inverted); gl.uniform1f(renderer.print.u.uInvertX, fx.invertX); gl.uniform1f(renderer.print.u.uPx, px);
+  gl.uniform3fv(renderer.print.u.uPaperCam, paperCamera); gl.uniform4fv(renderer.print.u.uPanelRect, panelRects); gl.uniform3fv(renderer.print.u.uPanelCam, panelCameras);
+  gl.uniform1f(renderer.print.u.uLoupeOn, paperCamera[0] > 1.001 || panelRects[2] > panelRects[0] || panelRects[6] > panelRects[4] || panelRects[10] > panelRects[8] ? 1 : 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, view.cw, view.ch); gl.clearColor(INK[0], INK[1], INK[2], 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.viewport(view.sx, view.ch - view.sy - view.sh, view.sw, view.sh);
+  gl.useProgram(renderer.lens.p); gl.bindTexture(gl.TEXTURE_2D, renderer.printed.tex);
+  const loupe = clamp(Math.log(fx.lensZoom) / Math.log(3), 0, fx.inverted ? 0.5 : 1.15);
+  gl.uniform1f(renderer.lens.u.uLoupe, LENS.loupe * loupe); gl.uniform2f(renderer.lens.u.uSize, view.sw, view.sh);
+  const full = view.scale >= LENS_FULL_SCALE;
+  gl.uniform1i(renderer.lens.u.uTaps, full ? LENS_TAPS_FULL : LENS_TAPS_REDUCED); gl.uniform1i(renderer.lens.u.uBlurTaps, full ? BLUR_TAPS_FULL : BLUR_TAPS_REDUCED);
+  gl.uniform3f(renderer.lens.u.uBlur, fx.blurA, fx.blurBx, fx.blurBy);
+  gl.uniform1f(renderer.lens.u.uMotion, fx.blurA !== 0 || fx.blurBx !== 0 || fx.blurBy !== 0 ? 1 : 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/* ── input: parallax ────────────────────────────────────── */
+const parallax = { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0 };
+const gyro = { ready: false, x: 0, y: 0 };
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const hint = document.getElementById('hint');
+const restParallax = () => { parallax.tx = 0; parallax.ty = 0; };
+function onPointerMove(e) {
+  if (e.pointerType === 'touch') return;
+  parallax.tx = clamp((e.clientX - view.cssX) / view.cssW * 2 - 1, -1, 1);
+  parallax.ty = clamp((e.clientY - view.cssY) / view.cssH * 2 - 1, -1, 1);
+}
+function onOrientation(e) {
+  if (e.beta == null || e.gamma == null) return;
+  const deg = screen.orientation && typeof screen.orientation.angle === 'number' ? screen.orientation.angle : (window.orientation || 0);
+  const a = deg * RAD, c = Math.cos(a), s = Math.sin(a);
+  const x = e.gamma * c + e.beta * s, y = e.beta * c - e.gamma * s;
+  if (!gyro.ready) { gyro.x = x; gyro.y = y; gyro.ready = true; }
+  parallax.tx = clamp((x - gyro.x) / 18, -1, 1); parallax.ty = clamp((y - gyro.y) / 18, -1, 1);
+}
+const motion = { listening: false, asked: false };
+function listenOrientation() {
+  if (motion.listening) return;
+  motion.listening = true;
+  addEventListener('deviceorientation', onOrientation);
+}
+function askMotion() {
+  if (motion.asked || reducedMotion.matches) return;
+  motion.asked = true;
+  removeEventListener('pointerup', askMotion, true); removeEventListener('touchend', askMotion, true);
+  DeviceOrientationEvent.requestPermission().then(r => { if (r === 'granted') listenOrientation(); }).catch(() => {}).then(() => hint.remove());
+}
+function initMotion() {
+  const DOE = window.DeviceOrientationEvent;
+  if (!DOE || reducedMotion.matches) return;
+  if (typeof DOE.requestPermission !== 'function') { listenOrientation(); return; }
+  if (motion.asked || !matchMedia('(pointer: coarse)').matches) return;
+  hint.style.display = 'block';
+  addEventListener('pointerup', askMotion, true); addEventListener('touchend', askMotion, true);
+}
+function onReducedMotion() {
+  restParallax(); gyro.ready = false; clock.last = 0; clock.stillDrawn = false;
+  if (!reducedMotion.matches) initMotion();
+  else if (!motion.asked) hint.style.display = 'none';
+}
+const parallaxSettled = () => Math.abs(parallax.x) + Math.abs(parallax.y) + Math.abs(parallax.vx) + Math.abs(parallax.vy) < 1e-4;
+function stepParallax(dt) {
+  const w = SPRING_OMEGA, still = reducedMotion.matches, tx = still ? 0 : parallax.tx, ty = still ? 0 : parallax.ty;
+  for (let left = dt; left > 0; left -= 1 / 120) {
+    const h = Math.min(left, 1 / 120);
+    parallax.vx += (-w * w * (parallax.x - tx) - 2 * w * parallax.vx) * h; parallax.x += parallax.vx * h;
+    parallax.vy += (-w * w * (parallax.y - ty) - 2 * w * parallax.vy) * h; parallax.y += parallax.vy * h;
+  }
+  for (let i = 0; i < 8; i++) { offsets[i * 2] = -parallax.x * LAYER_DEPTH[i]; offsets[i * 2 + 1] = -parallax.y * LAYER_DEPTH[i] * PARALLAX_Y; }
+  offsets[LAYER.plate2 * 2] += fx.regX; offsets[LAYER.plate2 * 2 + 1] += fx.regY;
+}
+
+/* ── loop, adaptive resolution, QA contract ─────────────── */
+const wrap = t => { const r = t % DURATION; return r < 0 ? r + DURATION : r; };
+const clock = { time: 0, frozen: null, last: 0, raf: 0, stillDrawn: false };
+const query = new URLSearchParams(location.search).get('t');
+if (query !== null && query !== '' && isFinite(+query)) clock.frozen = clock.time = wrap(+query);
+const api = window.__kdz = {
+  ready: false, duration: DURATION, frame: 0,
+  seek(t) {
+    if (t === null || t === undefined) clock.frozen = null;
+    else if (isFinite(+t)) clock.frozen = clock.time = wrap(+t);
+    clock.stillDrawn = false;
+  }
+};
+const REFRESH_RATES = [24, 25, 30, 48, 50, 60, 72, 75, 90, 100, 120, 144, 165, 240];
+const TARGET_FRAME_MS = 1000 / 60, QUALITY_WINDOW_MS = 1000, PIN_EXPIRY_MS = 30000;
+const frameSamples = new Float32Array(256);
+const quality = {
+  vsync: TARGET_FRAME_MS, cadence: TARGET_FRAME_MS, samples: 0, frames: 0, stalls: 0, windowStart: 0, lastDrop: 0,
+  hot: 0, cool: 0, holdUntil: 0, lastUp: -1e9, upHold: 0, backoff: 1, failures: 0, pinned: false,
+  capped: false, probeFrom: 0, probeCadence: 0, liveScale: 1, sized: false
+};
+function snapRefresh(ms) {
+  let best = REFRESH_RATES[0];
+  for (let i = 1; i < REFRESH_RATES.length; i++) if (Math.abs(1000 / REFRESH_RATES[i] - ms) < Math.abs(1000 / best - ms)) best = REFRESH_RATES[i];
+  return 1000 / best;
+}
+function sortSamples(n) {
+  for (let i = 1; i < n; i++) {
+    const v = frameSamples[i];
+    let j = i - 1;
+    while (j >= 0 && frameSamples[j] > v) { frameSamples[j + 1] = frameSamples[j]; j--; }
+    frameSamples[j + 1] = v;
+  }
+}
+function resetQuality(now) {
+  const q = quality;
+  if (q.probeFrom) q.liveScale = q.probeFrom;
+  q.probeFrom = 0; q.capped = false; q.pinned = false; q.failures = 0; q.backoff = 1; q.cool = q.hot = 0;
+  q.samples = q.frames = q.stalls = 0; q.windowStart = now; q.holdUntil = now + QUALITY_WINDOW_MS;
+}
+function applyScale(next) {
+  quality.liveScale = clamp(Math.round(next * 10) / 10, SCALE_MIN, 1);
+  setScale(quality.liveScale);
+  quality.hot = quality.cool = 0;
+}
+function startProbe(now) {
+  const q = quality;
+  q.probeFrom = view.scale; q.probeCadence = q.cadence;
+  applyScale(SCALE_MIN);
+  q.holdUntil = now + 2.5 * QUALITY_WINDOW_MS;
+}
+function settleProbe(now) {
+  const q = quality;
+  if (q.cadence >= q.probeCadence * 0.8) { q.capped = true; applyScale(q.probeFrom); }
+  q.probeFrom = 0; q.holdUntil = now + 1500; q.lastDrop = now;
+}
+const countAbove = (n, ms) => { let c = 0; for (let i = n - 1; i >= 0 && frameSamples[i] > ms; i--) c++; return c; };
+function adaptQuality(now, dtMs, cpuMs) {
+  const q = quality, budget = Math.min(TARGET_FRAME_MS, q.vsync);
+  const timed = timer.ext !== null && now - timer.at < QUALITY_WINDOW_MS, gpuMs = timed ? timer.gpuMs : 0;
+  const dropped = dtMs > q.cadence * 1.5, late = dtMs > budget * 1.5;
+  if (dtMs < 50 && q.samples < frameSamples.length) frameSamples[q.samples++] = dtMs;
+  else q.stalls++;
+  q.frames++;
+  if (dropped || (late && !q.capped)) q.lastDrop = now;
+  if (timed) { if (Math.max(cpuMs, gpuMs) > budget * 0.9) q.hot++; else q.hot = Math.max(0, q.hot - 1); }
+  const grown = (view.scale + 0.1) * (view.scale + 0.1) / (view.scale * view.scale);
+  const headroom = timed ? cpuMs < budget * 0.6 && gpuMs * grown < budget * 0.8 : !dropped && (q.capped || !late);
+  if (headroom) q.cool++; else q.cool = 0;
+  let overload = timed && q.hot >= 20, slow = false;
+  if (now - q.windowStart >= QUALITY_WINDOW_MS) {
+    const n = q.samples;
+    sortSamples(n);
+    if (n >= 20) { q.vsync = snapRefresh(frameSamples[Math.floor(n * 0.1)]); q.cadence = snapRefresh(frameSamples[n >> 1]); }
+    if (!timed && q.frames >= 10) {
+      const drops = q.stalls + countAbove(n, q.cadence * 1.5), lates = q.stalls + countAbove(n, Math.min(TARGET_FRAME_MS, q.vsync) * 1.5);
+      if (drops > q.frames * 0.15) overload = true;
+      else slow = !q.capped && lates > q.frames * 0.5;
+    }
+    q.samples = q.frames = q.stalls = 0; q.windowStart = now;
+    if (q.probeFrom) { settleProbe(now); return; }
+  }
+  if (q.pinned && now - q.lastDrop >= PIN_EXPIRY_MS * q.backoff) q.pinned = false;
+  if (now < q.holdUntil) return;
+  const failedStep = now - q.lastUp < q.upHold + 2000;
+  if (slow && !failedStep && !q.capped && view.scale > SCALE_MIN) { startProbe(now); return; }
+  if ((overload || (slow && failedStep)) && view.scale > SCALE_MIN) {
+    if (failedStep) { q.backoff = Math.min(8, q.backoff * 2); if (++q.failures >= 2) q.pinned = true; }
+    let next = view.scale - 0.1;
+    if (gpuMs > 0) next = Math.min(next, Math.floor(10 * view.scale * Math.sqrt(0.8 * budget / gpuMs)) / 10);
+    applyScale(next);
+    q.holdUntil = now + 1500; q.lastDrop = now;
+  } else if (!q.pinned && view.scale < 1 && q.cool >= 90 && now - q.lastDrop >= 3000 * q.backoff) {
+    applyScale(view.scale + 0.1);
+    q.lastUp = now; q.upHold = 2000 * q.backoff; q.holdUntil = now + q.upHold;
+  }
+}
+function frame(now) {
+  clock.raf = requestAnimationFrame(frame);
+  const workStart = performance.now();
+  const dt = clock.last ? Math.min(0.1, (now - clock.last) / 1000) : 1 / 60;
+  clock.last = now;
+  if (Math.min(2, window.devicePixelRatio || 1) !== view.dpr) view.dirty = true;
+  const still = reducedMotion.matches, live = clock.frozen === null && !still;
+  if (still && clock.frozen === null && clock.stillDrawn && !view.dirty && parallaxSettled()) { api.frame++; return; }
+  if (view.dirty) layout();
+  if (live) { clock.time = wrap(clock.time + dt); setScale(quality.liveScale); }
+  else setScale(1);
+  const t = clock.frozen !== null ? clock.frozen : still ? CUE.idleStill : clock.time;
+  compose(t);
+  stepParallax(dt);
+  timerPoll();
+  const timerSlot = timerBegin();
+  render();
+  timerEnd(timerSlot);
+  if (live) adaptQuality(now, dt * 1000, performance.now() - workStart);
+  clock.stillDrawn = still;
+  api.frame++; api.ready = true;
+}
+function start() { if (!clock.raf && gl && !gl.isContextLost() && !document.hidden) { clock.last = 0; clock.stillDrawn = false; resetQuality(performance.now()); clock.raf = requestAnimationFrame(frame); } }
+function stop() { if (clock.raf) cancelAnimationFrame(clock.raf); clock.raf = 0; }
+
+/* ── fallback: static SVG lockup from the live geometry ─── */
+function fallbackSvg() {
+  const s = LOCKUP.s, d = [];
+  const svgNum = v => v.toFixed(1);
+  const place = (g, ox) => {
+    for (const p of g.parts) {
+      if (!p.arc) { d.push('M' + svgNum(ox + p.x0 * s) + ' ' + svgNum(LOCKUP.base - p.y0 * s) + 'L' + svgNum(ox + p.x1 * s) + ' ' + svgNum(LOCKUP.base - p.y1 * s)); continue; }
+      const steps = Math.ceil(Math.abs(p.sweep) / (Math.PI / 2)), r = svgNum(p.r * s);
+      d.push('M' + svgNum(ox + (p.cx + p.r * Math.cos(p.a0)) * s) + ' ' + svgNum(LOCKUP.base - (p.cy + p.r * Math.sin(p.a0)) * s));
+      for (let i = 1; i <= steps; i++) {
+        const a = p.a0 + p.sweep * i / steps;
+        d.push('A' + r + ' ' + r + ' 0 0 ' + (p.sweep < 0 ? 1 : 0) + ' ' + svgNum(ox + (p.cx + p.r * Math.cos(a)) * s) + ' ' + svgNum(LOCKUP.base - (p.cy + p.r * Math.sin(a)) * s));
+      }
+    }
+  };
+  place(GK, LOCKUP.kx); place(GD, LOCKUP.dx); place(GZ, LOCKUP.zx);
+  const x0 = colL(0) - 48, y0 = LOCKUP.cap - 48, w = colR(7) - colL(0) + 96, h = LOCKUP.base - LOCKUP.cap + 96;
+  return '<svg viewBox="' + x0 + ' ' + y0 + ' ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="' + d.join('') +
+    '" fill="none" stroke="#ece7dc" stroke-width="' + svgNum(2 * PEN_HW * s) + '" stroke-linecap="round"/></svg>';
+}
+function showFallback(message) {
+  stop();
+  const el = document.getElementById('fallback');
+  el.innerHTML = fallbackSvg() + '<div>KDZ &mdash; STENCIL MONOLINE<br>' + message + '</div>';
+  el.style.display = 'flex'; canvas.style.display = 'none'; hint.style.display = 'none';
+}
+
+/* ── boot ───────────────────────────────────────────────── */
+addEventListener('pointermove', onPointerMove, { passive: true });
+document.documentElement.addEventListener('pointerleave', restParallax);
+document.addEventListener('mouseout', e => { if (!e.relatedTarget) restParallax(); });
+addEventListener('blur', restParallax);
+addEventListener('resize', () => { view.dirty = true; });
+addEventListener('orientationchange', () => { view.dirty = true; gyro.ready = false; });
+if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', () => { view.dirty = true; gyro.ready = false; });
+reducedMotion.addEventListener('change', onReducedMotion);
+document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else start(); });
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); stop(); }, false);
+canvas.addEventListener('webglcontextrestored', () => {
+  try { if (initGL()) start(); else showFallback('WEBGL2 CONTEXT COULD NOT BE RESTORED'); }
+  catch (err) { console.error(err.message); showFallback('RENDERER FAILED TO RECOVER'); }
+}, false);
+try {
+  if (initGL()) { initMotion(); start(); }
+  else showFallback('THIS PIECE NEEDS WEBGL2');
+} catch (err) {
+  console.error(err.message);
+  showFallback('RENDERER FAILED TO START');
+}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "locked-down",
+  "version": "1.0.0",
+  "description": "",
+  "main": "build.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Keedez-lol/Locked-Down.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Keedez-lol/Locked-Down/issues"
+  },
+  "homepage": "https://github.com/Keedez-lol/Locked-Down#readme",
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}
