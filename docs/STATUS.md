@@ -23,3 +23,7 @@ Rama: `claude/exciting-tesla-vgb2ey`. Todo lo listado como "hecho" está en `src
 
 ## Notas de integración conocidas
 Ver `docs/INTEGRATION_NOTES.md`. Resumen: convención `_wantPower` = vatios base (Power aplica 2^oc); partículas en píxeles de mundo (casilla·48); `Fluids` solo reconoce pozos/bombas con `nature.out:{water:…}`; extractores de terreno (cantera, arcilla, arena, turba, salinas) van como `nature` con `terrain`; `Render.showRanges` y `Particles.setQuality` ya se propagan desde `main.js`.
+
+## Correcciones de descubribilidad pendientes (tras la pasada de QA de interfaz)
+- Tutorial: paso explícito «haz tablones en el Almacén central (receta Tablón)»; el almacén es la mesa de fabricación manual y no se explica.
+- Panel del Almacén central: encabezado «Fabricación manual» sobre la lista de recetas.
