@@ -54,7 +54,7 @@ P.open = () => {
     el('div.hr'), list.el, el('div.hr'), status
   ]);
   node = el('div.pause', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Pausa', tabindex: -1 }, col);
-  node.addEventListener('keydown', e => { if (list.key(e)) e.preventDefault(); });
+  node.addEventListener('keydown', e => { if (list && list.key(e)) e.preventDefault(); });
   node.addEventListener('pointerdown', e => { if (e.target === node) { e.preventDefault(); P.close(); } });
   ov = { close: fromStack => P.close(fromStack), el: node, kind: 'pause' };
   let root = document.getElementById('overlay-root');

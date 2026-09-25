@@ -491,7 +491,7 @@ function lighting(L, v, t) {
     level = U.lerp(0.35, 1, d);
     tr = U.lerp(0.72, 1.0, d); tg = U.lerp(0.80, 0.985, d); tb = U.lerp(1.0, 0.93, d);
   } else {
-    level = ld && typeof ld.ambient === 'number' ? ld.ambient : 0.35;
+    level = 0.38 + 0.6 * (ld && typeof ld.ambient === 'number' ? ld.ambient : 0.35);
     const rgb = ld && ld.tint ? U.hexToRgb(ld.tint) : [200, 200, 200], mx = Math.max(1, rgb[0], rgb[1], rgb[2]);
     tr = rgb[0] / mx; tg = rgb[1] / mx; tb = rgb[2] / mx;
   }
@@ -508,6 +508,7 @@ function lighting(L, v, t) {
     const inst = structs[visibleUids[i]]; if (!inst) continue;
     const def = sdef(inst.id); if (!def) continue;
     const sz = def.size || 1, cxw = (inst.x + sz / 2) * TILE, cyw = (inst.y + sz / 2) * TILE;
+    if (def.elevator || def.id === 'hub') addLight(cxw, cyw, 7 * TILE, 0.55, '#ffe2b0');
     if (def.light && !DARK_STATES[inst.state]) {
       const lt = def.light, flick = def.tier <= 1 ? 0.88 + 0.12 * Math.sin(t * 9 + inst.x * 1.7 + inst.y * 2.3) : 1;
       addLight(cxw, cyw, (lt.radius || 4) * TILE, (lt.intensity || 0.8) * flick, lt.color || '#ffb060');
@@ -542,6 +543,16 @@ function lighting(L, v, t) {
     else addLight(p.x * TILE, p.y * TILE, 0.7 * TILE, 0.22, '#ffd27a');
   }
   const P = LD.Particles; if (P && P.forEachLight) P.forEachLight(L, addLightPacked);
+  if (lay && L > 0 && W.isExcavated) {
+    const v = R.view, chunk = lay.chunk || 16, cw = lay.cw || Math.ceil(lay.w / chunk), ch = lay.ch || Math.ceil(lay.h / chunk);
+    const cx0 = Math.max(0, Math.floor(tx0 / chunk)), cx1 = Math.min(cw - 1, Math.floor(tx1 / chunk)), cy0 = Math.max(0, Math.floor(ty0 / chunk)), cy1 = Math.min(ch - 1, Math.floor(ty1 / chunk));
+    lc.globalCompositeOperation = 'multiply'; lc.globalAlpha = 1; lc.fillStyle = 'rgb(118,118,124)';
+    const cs = chunk * TILE * v.z * LS;
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      if (W.isExcavated(L, cx, cy)) continue;
+      lc.fillRect((cx * chunk * TILE * v.z + v.ox) * LS, (cy * chunk * TILE * v.z + v.oy) * LS, cs + 0.5, cs + 0.5);
+    }
+  }
   lc.globalCompositeOperation = 'source-over'; lc.globalAlpha = 1;
   wc.globalCompositeOperation = 'multiply';
   wc.imageSmoothingEnabled = true;

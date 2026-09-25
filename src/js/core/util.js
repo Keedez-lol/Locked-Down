@@ -50,7 +50,7 @@ U.fmtTime = s => {
   return r + 's';
 };
 U.fmtClock = dayFrac => {
-  const mins = Math.floor(dayFrac * 24 * 60);
+  const mins = Math.floor((((dayFrac + 0.2) % 1) + 1) % 1 * 24 * 60);
   return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
 };
 U.pad2 = n => String(n).padStart(2, '0');

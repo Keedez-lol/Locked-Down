@@ -244,7 +244,7 @@ UI.itemChip = (itemId, n, o = {}) => {
     n = n2; o = o2;
     qty.textContent = U.fmt(n);
     const r = o.rate;
-    if (r === undefined || r === null) rate.hidden = true;
+    if (r === undefined || r === null || Math.abs(r) < 0.0005) rate.hidden = true;
     else { rate.hidden = false; rate.textContent = U.fmtRate(r); rate.className = 'ui-chip-r mono ' + (r > 0.0005 ? 'ok' : r < -0.0005 ? 'bad' : 'dim'); }
     if (o.cap) { cap.hidden = false; cap.textContent = '/ ' + U.fmt(o.cap); chip.classList.toggle('full', n >= o.cap); } else { cap.hidden = true; chip.classList.remove('full'); }
   };

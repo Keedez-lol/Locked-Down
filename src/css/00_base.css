@@ -38,6 +38,6 @@ button{cursor:pointer}
 .boot-bar{width:16rem;height:1px;background:var(--line);position:relative;overflow:hidden}
 .boot-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--bone);transition:width .2s}
 .boot-status{font:500 .5625rem/1 var(--mono);letter-spacing:.18em;color:var(--bone3)}
-#toast-root{position:absolute;left:50%;top:5.5rem;transform:translateX(-50%);z-index:40;display:flex;flex-direction:column;gap:.375rem;pointer-events:none}
+#toast-root{position:absolute;left:50%;bottom:8.25rem;transform:translateX(-50%);z-index:40;display:flex;flex-direction:column-reverse;gap:.375rem;pointer-events:none}
 #overlay-root{position:absolute;inset:0;z-index:30;pointer-events:none}
 #overlay-root>*{pointer-events:auto}

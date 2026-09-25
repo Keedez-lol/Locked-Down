@@ -45,7 +45,6 @@ function checkObjectives() {
     if (!ok) continue;
     G.objectives.done[id] = true; changed = true;
     LD.State.log('Objetivo cumplido: ' + o.title, 'ok');
-    E.emit('toast', { text: 'Objetivo: ' + o.title, kind: 'ok' });
     if (LD.Audio && LD.Audio.play) LD.Audio.play('objective');
     E.emit('objective:done', id);
   }

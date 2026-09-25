@@ -10,7 +10,7 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 const errors = [], logs = [];
 page.on('console', m => { const t = m.type(); if (t === 'error') errors.push(m.text()); logs.push(`[${t}] ${m.text()}`); });
-page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+page.on('pageerror', e => errors.push('pageerror: ' + e.message + '\n' + (e.stack || '').split('\n').slice(0, 6).join('\n')));
 await page.goto('file://' + dist);
 await page.waitForFunction(() => window.LD && LD.Main && LD.Main.ready, null, { timeout: 60000 }).catch(() => errors.push('boot timeout: LD.Main.ready never true'));
 await page.waitForTimeout(1500);
