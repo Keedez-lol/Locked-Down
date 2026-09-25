@@ -5,10 +5,10 @@ const LD = window.LD;
 LD.KDZ = { init(opts = {}) { return (function (opts) {
 
 /* ── config ─────────────────────────────────────────────── */
-const W = 1920, H = 1080, DURATION = 20, TAU = Math.PI * 2, RAD = Math.PI / 180;
+const W = 1080, H = 1080, COLS = 8, ROWS = 8, DURATION = 20, TAU = Math.PI * 2, RAD = Math.PI / 180;
 const rgb = hex => [(hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255];
 const INK = rgb(0x0c0c0d), BONE = rgb(0xece7dc), VERMILION = rgb(0xe8401c);
-const GRID = { x: 108, y: 72, col: 120, colStep: 144, row: 136, rowStep: 160 };
+const GRID = { x: 72, y: 72, col: 96, colStep: 120, row: 96, rowStep: 120 };
 const colL = i => GRID.x + i * GRID.colStep;
 const colR = i => colL(i) + GRID.col;
 const rowT = j => GRID.y + j * GRID.rowStep;
@@ -76,17 +76,17 @@ LD.KDZ.glyphs = { K: GK, D: GD, Z: GZ, meta: { K, D, Z } }; LD.KDZ.PEN_HW = PEN_
 GLYPHS.forEach((g, i) => { g.id = i; });
 
 const LOCKUP = (() => {
-  const s = (rowB(3) - rowT(1)) / 1000, kernKD = -8, kernDZ = -130;
+  const s = (rowB(4) - rowT(2)) / 1000, kernKD = -8, kernDZ = -130;
   const spacing = Math.round(((colR(7) - colL(0)) / s - (GK.w + GD.w + GZ.w) - kernKD - kernDZ) / 2);
   const kx = colL(0) - GK.x0 * s;
   const dx = kx + (GK.x1 + spacing + kernKD - GD.x0) * s;
   const zx = dx + (GD.x1 + spacing + kernDZ - GZ.x0) * s;
-  return { s, kernKD, kernDZ, spacing, spaceKD: spacing + kernKD, spaceDZ: spacing + kernDZ, kx, dx, zx, cap: rowT(1), base: rowB(3), capStage: Math.round((rowB(3) - rowT(1))) };
+  return { s, kernKD, kernDZ, spacing, spaceKD: spacing + kernKD, spaceDZ: spacing + kernDZ, kx, dx, zx, cap: rowT(2), base: rowB(4), capStage: Math.round((rowB(4) - rowT(2))) };
 })();
 const LOCKUP_FONT_W = GK.w + LOCKUP.spaceKD + GD.w + LOCKUP.spaceDZ + GZ.w;
-const SLAB = { pad: 8, y0: rowB(0), y1: rowT(4) };
+const SLAB = { pad: 8, y0: rowB(1), y1: rowT(5) };
 const GIANT_D_SCALE = (CONTENT.y1 - CONTENT.y0 - 32) / (1000 + 2 * (OVERSHOOT + PEN_HW));
-const GIANT_K = { scale: 1.4, x: 520, y: 1260 };
+const GIANT_K = { scale: 1.4, x: 60, y: 1260 };
 
 /* ── type: technical lettering on a 4 × 6 grid, drawn with the hero stroke primitive ── */
 const FONT_SRC = {
@@ -205,15 +205,15 @@ const ARM_DEG = fixed1(K.armAngle) + '°', LEG_DEG = fixed1(K.legAngle) + '°', 
 const SCALE_TINY = 24, TINY_WEIGHT = 1.6, TINY_RATIO = Math.round(LOCKUP.capStage / SCALE_TINY);
 const DETAIL_ZOOM = 3.5, PANEL_ZOOM = 3;
 const HEADER = [
-  { at: 0, caption: 'FIG. 1  CONSTRUCTION GRID 12 × 6', act: 'ACT I / IV' },
+  { at: 0, caption: 'FIG. 1  CONSTRUCTION GRID 8 × 8', act: 'ACT I / IV' },
   { at: CUE.act2, caption: 'FIG. 2  ENTRY  K / D / Z', act: 'ACT II / IV' },
   { at: CUE.triptych, caption: 'FIG. 2.4  DETAILS B / C / D', act: 'ACT II / IV' },
   { at: CUE.act3, caption: 'FIG. 3  PERMUTATION  3! = 6', act: 'ACT III / IV' },
   { at: CUE.act4, caption: 'FIG. 4  LOCKUP', act: 'ACT IV / IV' }
 ];
 const NUMERALS = ['I', 'II', 'III', 'IV'];
-const COL_INDEX = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
-const ROW_INDEX = ['A', 'B', 'C', 'D', 'E', 'F'];
+const COL_INDEX = Array.from({ length: COLS }, (_, i) => String(i + 1).padStart(2, '0'));
+const ROW_INDEX = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const PERMUTATIONS = [[0, 1, 2], [0, 2, 1], [1, 2, 0], [2, 1, 0], [2, 0, 1], [1, 0, 2]];
 const IN_ORDER = [0, 1, 2];
 const COPY = {
@@ -230,9 +230,9 @@ const COPY = {
   beatTail: ' / ' + BEATS.count + '   ' + Math.round(60 / BEAT) + ' BPM'
 };
 const SPEC_GRID = [
-  'FIG. 1   GRID', 'STAGE    1920 × 1080', 'COLUMNS  12 × ' + GRID.col + ', GUTTER ' + (GRID.colStep - GRID.col),
-  'ROWS     6 × ' + GRID.row + ', GUTTER ' + (GRID.rowStep - GRID.row), 'BASELINE 8', 'MARGINS  ' + GRID.x + ' / ' + GRID.y,
-  'LOCKUP   CAP ' + LOCKUP.capStage + ' = ROWS B-D'
+  'FIG. 1   GRID', 'STAGE    ' + W + ' × ' + H, 'COLUMNS  ' + COLS + ' × ' + GRID.col + ', GUTTER ' + (GRID.colStep - GRID.col),
+  'ROWS     ' + ROWS + ' × ' + GRID.row + ', GUTTER ' + (GRID.rowStep - GRID.row), 'BASELINE 8', 'MARGINS  ' + GRID.x + ' / ' + GRID.y,
+  'LOCKUP   CAP ' + LOCKUP.capStage + ' = ROWS C-E'
 ];
 const specRow = (letter, first, second = '') => (letter.padEnd(4) + first).padEnd(second ? 16 : 0) + second;
 const SPEC_ENTRY = [
@@ -256,15 +256,15 @@ const NOTES = [
   '4. Z BARS ' + Z.topBar + ' / ' + Z.baseBar + ', BASE LONGER FOR OPTICAL BALANCE.'
 ];
 const TITLE_BLOCK = [
-  [0, 0, 'DWG NO.', 'KDZ-001'], [276, 0, 'REV', 'D'], [414, 0, 'SHEET', '4 / 4'],
-  [0, 1, 'PEN', 'ROUND, MONOLINE'], [276, 1, 'UNITS', '1000 = CAP HEIGHT'],
+  [0, 0, 'DWG NO.', 'KDZ-001'], [468, 0, 'REV', 'D'], [702, 0, 'SHEET', '4 / 4'],
+  [0, 1, 'PEN', 'ROUND, MONOLINE'], [468, 1, 'UNITS', '1000 = CAP HEIGHT'],
   [0, 2, 'TITLE', 'STENCIL MONOLINE  K D Z']
 ];
 const PANELS = [
-  { x0: colL(0), x1: colR(3), letter: 'B', line1: 'K - ARM / LEG JUNCTION', zoom: PANEL_ZOOM, glyph: 0, focus: [K.legStart[0] - K.normal[0] * 50 - 20, K.legStart[1] - K.normal[1] * 50], clear: null },
-  { x0: colL(4), x1: colR(7), letter: 'C', line1: 'D - BOWL OVERSHOOT', zoom: 2 * PANEL_ZOOM, glyph: 1, focus: [50, 960], clear: [-60, 940, 140, 1100] },
-  { x0: colL(8), x1: colR(11), letter: 'D', line1: 'Z - DIAGONAL / TOP BAR', zoom: PANEL_ZOOM, glyph: 2, focus: [470, 900], clear: null }
-].map(panel => Object.assign(panel, { scale: 'SCALE ' + panel.zoom + ':1' }));
+  { letter: 'B', line1: 'K - ARM / LEG JUNCTION', zoom: PANEL_ZOOM, glyph: 0, focus: [K.legStart[0] - K.normal[0] * 50 - 20, K.legStart[1] - K.normal[1] * 50], clear: null },
+  { letter: 'C', line1: 'D - BOWL OVERSHOOT', zoom: 2 * PANEL_ZOOM, glyph: 1, focus: [50, 960], clear: [-60, 940, 140, 1100] },
+  { letter: 'D', line1: 'Z - DIAGONAL / TOP BAR', zoom: PANEL_ZOOM, glyph: 2, focus: [470, 900], clear: null }
+].map((panel, i) => { const ph = (CONTENT.y1 - CONTENT.y0 - 2 * (GRID.rowStep - GRID.row)) / 3, y0 = CONTENT.y0 + i * (ph + GRID.rowStep - GRID.row); return Object.assign(panel, { y0, y1: y0 + ph, x0: CONTENT.x0, x1: CONTENT.x1, scale: 'SCALE ' + panel.zoom + ':1' }); });
 
 /* ── primitive streams (one instance = one analytic SDF primitive) ── */
 const STRIDE = 16, MAX_RUNS = 256;
@@ -506,7 +506,7 @@ const nbDraw = (x, y, size, align = 0) => { setTextArgs(x, y, STATIC, align); dr
 /* ── composition: sheet furniture ───────────────────────── */
 const RULER_INSET = 16, ROW_INDEX_X = CONTENT.x0 - 44, COL_INDEX_Y = rowT(0) + 18, COL_INDEX_CLEAR = COL_INDEX_Y + 10 / 6 + TEXT_PAD + 2;
 const CROSS_NEAR_LOCKUP = (() => {
-  const pts = [], s = LOCKUP.s, near = new Uint8Array(55);
+  const pts = [], s = LOCKUP.s, near = new Uint8Array((COLS - 1) * (ROWS - 1));
   const place = (g, ox) => {
     for (const p of g.parts) for (let i = 0, n = Math.ceil(p.len / 2); i <= n; i++) {
       const a = p.arc ? p.a0 + p.sweep * i / n : 0;
@@ -516,23 +516,22 @@ const CROSS_NEAR_LOCKUP = (() => {
     }
   };
   place(GK, LOCKUP.kx); place(GD, LOCKUP.dx); place(GZ, LOCKUP.zx);
-  for (let i = 0; i < 11; i++) for (let j = 0; j < 5; j++) {
+  for (let i = 0; i < COLS - 1; i++) for (let j = 0; j < ROWS - 1; j++) {
     const x = colR(i) + 12, y = rowB(j) + 12;
     let d = 1e9;
     for (let k = 0; k < pts.length; k += 2) d = Math.min(d, Math.hypot(pts[k] - x, pts[k + 1] - y));
-    near[i * 5 + j] = d - PEN_HW * s - 4 < 8 ? 1 : 0;
+    near[i * (ROWS - 1) + j] = d - PEN_HW * s - 4 < 8 ? 1 : 0;
   }
   return near;
 })();
 const CROSS_NEAR_LABELS = (() => {
-  const near = new Uint8Array(55), x0 = colL(8) + TEXT_INSET - TEXT_PAD, reach = 24;
+  const near = new Uint8Array((COLS - 1) * (ROWS - 1)), x0 = colL(0) + TEXT_INSET - TEXT_PAD, reach = 24;
   const w = Math.max(textWidth(COPY.capLine, COPY.capLine.length, 12), textWidth(COPY.baseLine, COPY.baseLine.length, 12));
-  const baselines = [LOCKUP.cap + 6, LOCKUP.base + 6];
-  for (let i = 0; i < 11; i++) for (let j = 0; j < 5; j++) {
+  const baselines = [LOCKUP.cap - 8, LOCKUP.base + 18];
+  for (let i = 0; i < COLS - 1; i++) for (let j = 0; j < ROWS - 1; j++) {
     const x = colR(i) + 12, y = rowB(j) + 12;
-    const hugsColumn = x < x0 && x0 - x < reach;
     const nearLabel = x > x0 - reach && x < x0 + w + reach && baselines.some(b => y > b - 12 - reach && y < b + 2 + reach);
-    near[i * 5 + j] = hugsColumn || nearLabel ? 1 : 0;
+    near[i * (ROWS - 1) + j] = nearLabel ? 1 : 0;
   }
   return near;
 })();
@@ -546,22 +545,22 @@ function composeRuler(cycle) {
   }
 }
 function composeGridColumns(cycle) {
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 2 * COLS; i++) {
     const x = i & 1 ? colR(i >> 1) : colL(i >> 1), st = CUE.gridCols + i * 0.022;
     const p = easeSettle(progress(cycle, st, st + CUE.gridDraw));
     if (p > 0) seg(x, CONTENT.y0, x, CONTENT.y0 + (CONTENT.y1 - CONTENT.y0) * p, 0.5);
   }
 }
 function composeGridRows(cycle) {
-  for (let k = 0; k < 12; k++) {
+  for (let k = 0; k < 2 * ROWS; k++) {
     const y = k & 1 ? rowB(k >> 1) : rowT(k >> 1), st = CUE.gridRows + k * 0.04;
     const p = easeSettle(progress(cycle, st, st + CUE.gridDraw));
     if (p > 0) seg(CONTENT.x0, y, CONTENT.x0 + (CONTENT.x1 - CONTENT.x0) * p, y, 0.5);
   }
 }
 function composeGutterCrosses(cycle, clear) {
-  for (let i = 0; i < 11; i++) for (let j = 0; j < 5; j++) {
-    const k = i * 5 + j;
+  for (let i = 0; i < COLS - 1; i++) for (let j = 0; j < ROWS - 1; j++) {
+    const k = i * (ROWS - 1) + j;
     if ((clear & CROSS_CLEAR.lockup && CROSS_NEAR_LOCKUP[k]) || (clear & CROSS_CLEAR.labels && CROSS_NEAR_LABELS[k])) continue;
     const st = CUE.gutterCrosses + (i + j) * 0.02, p = easeOutExpo(progress(cycle, st, st + 0.3));
     if (p <= 0) continue;
@@ -570,8 +569,8 @@ function composeGutterCrosses(cycle, clear) {
   }
 }
 function composeGridIndices() {
-  for (let i = 0; i < 12; i++) label(COL_INDEX[i], colL(i) + TEXT_INSET, COL_INDEX_Y, 10, CUE.colIndex + i * 0.03);
-  for (let j = 0; j < 6; j++) label(ROW_INDEX[j], ROW_INDEX_X, rowT(j) + 14, 10, CUE.rowIndex + j * 0.05);
+  for (let i = 0; i < COLS; i++) label(COL_INDEX[i], colL(i) + TEXT_INSET, COL_INDEX_Y, 10, CUE.colIndex + i * 0.03);
+  for (let j = 0; j < ROWS; j++) label(ROW_INDEX[j], ROW_INDEX_X, rowT(j) + 14, 10, CUE.rowIndex + j * 0.05);
 }
 function composeGrid(cycle, alpha, lines, labels, clear) {
   if (lines) {
@@ -587,11 +586,11 @@ function composeGrid(cycle, alpha, lines, labels, clear) {
 }
 function viewGrid(clearX0, clearY0, clearX1, clearY1) {
   const hw = hair(0.5);
-  for (let c = 0; c < 24; c++) {
+  for (let c = 0; c < 2 * COLS; c++) {
     const x = c & 1 ? colR(c >> 1) : colL(c >> 1);
     if (x <= clearX0 || x >= clearX1) seg(x, CONTENT.y0, x, CONTENT.y1, hw);
   }
-  for (let r = 0; r < 12; r++) {
+  for (let r = 0; r < 2 * ROWS; r++) {
     const y = r & 1 ? rowB(r >> 1) : rowT(r >> 1);
     if (y <= clearY0 || y >= clearY1) seg(CONTENT.x0, y, CONTENT.x1, y, hw);
   }
@@ -605,11 +604,11 @@ function composeConstruction(u, alpha, namesOnly) {
   unclip();
   paintInk(LAYER.meta, 0.9);
   const t0 = fx.time - u;
-  label(namesOnly ? COPY.capName : COPY.capLine, colL(8) + TEXT_INSET, LOCKUP.cap + 6, 12, t0 + 0.8);
-  label(namesOnly ? COPY.baseName : COPY.baseLine, colL(8) + TEXT_INSET, LOCKUP.base + 6, 12, t0 + 0.9);
+  label(namesOnly ? COPY.capName : COPY.capLine, colL(0) + TEXT_INSET, LOCKUP.cap - 8, 12, t0 + 0.8);
+  label(namesOnly ? COPY.baseName : COPY.baseLine, colL(0) + TEXT_INSET, LOCKUP.base + 18, 12, t0 + 0.9);
 }
 function constructionLines(u) {
-  const s = LOCKUP.s, cap = LOCKUP.cap, base = LOCKUP.base, lineEnd = colL(8) - 12;
+  const s = LOCKUP.s, cap = LOCKUP.cap, base = LOCKUP.base, lineEnd = CONTENT.x1;
   lineP(CONTENT.x0, cap, lineEnd, cap, easeSettle(progress(u, 0, 0.8)), 0.55);
   lineP(CONTENT.x0, base, lineEnd, base, easeSettle(progress(u, 0.1, 0.9)), 0.55);
   let p = easeSettle(progress(u, 0.4, 0.9));
@@ -633,11 +632,11 @@ function constructionDiagonals(u) {
   lineP(bx, by, bx + (K.foot[0] - K.branch[0]) * s * 1.1, by - (K.foot[1] - K.branch[1]) * s * 1.1, p, 0.5);
 }
 
-const SPEC_X = colL(8) + TEXT_INSET, SPEC_Y = rowT(1) + 56, SPEC_LEAD = 22;
+const SPEC_X = colL(0) + TEXT_INSET, SPEC_Y = rowT(6) + 14, SPEC_LEAD = 22;
 const blockWidth = (lines, size) => lines.reduce((w, line) => Math.max(w, textWidth(line, line.length, size)), 0);
 const SPEC_GRID_W = blockWidth(SPEC_GRID, 10), SPEC_ENTRY_W = blockWidth(SPEC_ENTRY.map(entry => entry[1]), 10);
 function specBlockKnock(lines, width) {
-  if (lines > 0) knockBlock(SPEC_X, LOCKUP.cap + 8, SPEC_X + width, SPEC_Y + (lines - 1) * SPEC_LEAD + 2);
+  if (lines > 0) knockBlock(SPEC_X, SPEC_Y - 12, SPEC_X + width, SPEC_Y + (lines - 1) * SPEC_LEAD + 2);
 }
 function specList(lines, width, revealAt, stagger) {
   paintInk(LAYER.meta, 0.94);
@@ -662,16 +661,16 @@ function dimsK(t0, withStroke) {
   const s = LOCKUP.s, jx = LOCKUP.kx, jy = LOCKUP.base - K.join[1] * s, kFootX = LOCKUP.kx + K.foot[0] * s;
   const x0 = LOCKUP.kx - PEN_HW * s, x1 = LOCKUP.kx + PEN_HW * s;
   paintInk(LAYER.construction, 0.85);
-  lineP(x1 + 8, jy, jx + 150, jy, p, 0.45);
-  arc(jx, jy, 112, -K.armAngle * RAD * p, 0, 0.5);
-  arc(kFootX, LOCKUP.base, 72, -Math.PI, -Math.PI + K.legAngle * RAD * p, 0.5);
+  lineP(x1 + 8, jy, jx + 112, jy, p, 0.45);
+  arc(jx, jy, 84, -K.armAngle * RAD * p, 0, 0.5);
+  arc(kFootX, LOCKUP.base, 54, -Math.PI, -Math.PI + K.legAngle * RAD * p, 0.5);
   if (withStroke) {
     lineP(x0, LOCKUP.cap - 17, x0, DIM_LANE - 6, p, 0.45); lineP(x1, LOCKUP.cap - 17, x1, DIM_LANE - 6, p, 0.45);
     dimH(x0, x1, DIM_LANE, p, 6);
   }
   paintInk(LAYER.meta, 0.94);
-  label(ARM_DEG, jx + 24, jy + 30, 12, t0 + 0.2);
-  label(LEG_DEG, kFootX - 142, LOCKUP.base - 12, 12, t0 + 0.25);
+  label(ARM_DEG, jx + 20, jy + 26, 12, t0 + 0.2);
+  label(LEG_DEG, kFootX - 108, LOCKUP.base - 10, 12, t0 + 0.25);
   if (withStroke) label(COPY.stroke, x0 + TEXT_INSET, DIM_LABEL, 12, t0 + 0.2);
 }
 function dimsD(t0) {
@@ -693,26 +692,26 @@ function dimsZ(t0) {
   if (p <= 0) return;
   const zFootX = LOCKUP.zx + Z.footX * LOCKUP.s;
   paintInk(LAYER.construction, 0.85);
-  arc(zFootX, LOCKUP.base, 76, -Z.angle * RAD * p, 0, 0.5);
+  arc(zFootX, LOCKUP.base, 58, -Z.angle * RAD * p, 0, 0.5);
   paintInk(LAYER.meta, 0.94);
-  label(Z_DEG, zFootX + 84, LOCKUP.base - 44, 12, t0 + 0.2);
+  label(Z_DEG, zFootX + 64, LOCKUP.base - 34, 12, t0 + 0.2);
 }
-const CHAIN_Y = rowT(4) + 40;
+const CHAIN_Y = rowT(5) + 18;
 const CHAIN_X = Float32Array.of(LOCKUP.kx + GK.x0 * LOCKUP.s, LOCKUP.kx + GK.x1 * LOCKUP.s, LOCKUP.dx + GD.x0 * LOCKUP.s, LOCKUP.dx + GD.x1 * LOCKUP.s, LOCKUP.zx + GZ.x0 * LOCKUP.s, LOCKUP.zx + GZ.x1 * LOCKUP.s);
 function dimsChain(t0) {
   const p = dimProgress(t0);
   if (p <= 0) return;
   const xs = CHAIN_X;
   paintInk(LAYER.construction, 0.85);
-  for (let i = 0; i < 6; i++) lineP(xs[i], rowT(4), xs[i], CHAIN_Y + 8, p, 0.45);
+  for (let i = 0; i < 6; i++) lineP(xs[i], rowT(5), xs[i], CHAIN_Y + 8, p, 0.45);
   const h = (xs[5] - xs[0]) * p;
   seg(xs[0], CHAIN_Y, xs[0] + h, CHAIN_Y, 0.5);
   if (p > 0.98) for (let i = 0; i < 6; i++) tick(xs[i], CHAIN_Y);
   paintInk(LAYER.meta, 0.94);
   for (let i = 0; i < 5; i++) label(COPY.chainWidths[i], (xs[i] + xs[i + 1]) / 2, CHAIN_Y - 10, 12, t0 + 0.2 + i * 0.04, 0.5);
   paintInk(LAYER.meta, 0.6);
-  label(COPY.chainKern[0], (xs[1] + xs[2]) / 2, CHAIN_Y + 24, 10, t0 + 0.3, 0.5);
-  label(COPY.chainKern[1], (xs[3] + xs[4]) / 2, CHAIN_Y + 24, 10, t0 + 0.34, 0.5);
+  label(COPY.chainKern[0], (xs[1] + xs[2]) / 2, CHAIN_Y + 22, 10, t0 + 0.3, 0.5);
+  label(COPY.chainKern[1], (xs[3] + xs[4]) / 2, CHAIN_Y + 22, 10, t0 + 0.34, 0.5);
 }
 function dimsGap(t0) {
   const p = dimProgress(t0);
@@ -732,7 +731,7 @@ function composeActI(cycle) {
   specList(SPEC_GRID, SPEC_GRID_W, CUE.spec1, 0.1);
 }
 
-const DETAIL_ANCHOR_X = 820, DETAIL_ANCHOR_Y = 560, DETAIL_DRIFT = 0.04;
+const DETAIL_ANCHOR_X = Math.round(W * 0.43), DETAIL_ANCHOR_Y = Math.round(H * 0.52), DETAIL_DRIFT = 0.04;
 const DETAIL_FOCUS_X = LOCKUP.kx + 50 * LOCKUP.s, DETAIL_FOCUS_Y = LOCKUP.base - K.armStart[1] * LOCKUP.s;
 const DETAIL_CAM = Object.freeze({ z: DETAIL_ZOOM, x: DETAIL_ANCHOR_X - DETAIL_FOCUS_X * DETAIL_ZOOM, y: DETAIL_ANCHOR_Y - DETAIL_FOCUS_Y * DETAIL_ZOOM });
 function detailCamera(t, out) {
@@ -754,7 +753,7 @@ function composeDetailOverlay(t) {
   clearCamera();
   paintInk(LAYER.meta, 0.94);
   label(COPY.detailAGap, labelX, labelY, 14, CUE.detailArrive - 0.1, 0.5);
-  nbReset(); nbText(COPY.detailA); nbFixed(z, 1); nbText(COPY.detailScaleTail); nbDraw(colL(0) + TEXT_INSET, rowB(5) - 12, 12);
+  nbReset(); nbText(COPY.detailA); nbFixed(z, 1); nbText(COPY.detailScaleTail); nbDraw(colL(0) + TEXT_INSET, rowB(ROWS - 1) - 12, 12);
 }
 
 function composeSlabK(t) {
@@ -813,12 +812,12 @@ function composePanel(i, t) {
   if (open <= 0 || shut >= 1) return;
   const push = mix(PANEL_PUSH_FROM, 1, easeSettle(progress(t, w0, w0 + CUE.panelPush))) * (1 + PANEL_DRIFT * progress(t, w0, CUE.act3));
   const zoom = panel.zoom * push;
-  const s = LOCKUP.s, x0 = panel.x0, x1 = panel.x1, y0 = mix(CONTENT.y0, CONTENT.y1, shut), y1 = mix(CONTENT.y0, CONTENT.y1, open);
+  const s = LOCKUP.s, y0 = panel.y0, y1 = panel.y1, x0 = mix(panel.x0, panel.x1, shut), x1 = mix(panel.x0, panel.x1, open);
   const origin = panel.glyph === 0 ? LOCKUP.kx : panel.glyph === 1 ? LOCKUP.dx : LOCKUP.zx;
   const focusX = origin + panel.focus[0] * s, focusY = LOCKUP.base - panel.focus[1] * s;
   const clearX0 = panel.clear ? sheetX(origin, panel.clear[0]) : 1e5, clearX1 = panel.clear ? sheetX(origin, panel.clear[2]) : -1e5;
   const clearY0 = panel.clear ? sheetY(panel.clear[3]) : 1e5, clearY1 = panel.clear ? sheetY(panel.clear[1]) : -1e5;
-  const camX = (x0 + x1) / 2 - focusX * zoom, camY = (CONTENT.y0 + CONTENT.y1) / 2 - focusY * zoom;
+  const camX = (panel.x0 + panel.x1) / 2 - focusX * zoom, camY = (y0 + y1) / 2 - focusY * zoom;
   panelRects[i * 4] = x0; panelRects[i * 4 + 1] = y0; panelRects[i * 4 + 2] = x1; panelRects[i * 4 + 3] = y1;
   panelCameras[i * 3] = zoom; panelCameras[i * 3 + 1] = camX; panelCameras[i * 3 + 2] = camY;
   fx.lensZoom = Math.max(fx.lensZoom, PANEL_ZOOM * push);
@@ -826,8 +825,8 @@ function composePanel(i, t) {
   setView(zoom, camX, camY);
   paintUnder(LAYER.letters, 0.26); viewGrid(clearX0, clearY0, clearX1, clearY1);
   paintUnder(LAYER.letters, 0.5);
-  if (LOCKUP.cap <= clearY0 || LOCKUP.cap >= clearY1) seg(CONTENT.x0, LOCKUP.cap, colL(8) - 12, LOCKUP.cap, hair(0.55));
-  seg(CONTENT.x0, LOCKUP.base, colL(8) - 12, LOCKUP.base, hair(0.55));
+  if (LOCKUP.cap <= clearY0 || LOCKUP.cap >= clearY1) seg(CONTENT.x0, LOCKUP.cap, CONTENT.x1, LOCKUP.cap, hair(0.55));
+  seg(CONTENT.x0, LOCKUP.base, CONTENT.x1, LOCKUP.base, hair(0.55));
   paintInk(LAYER.letters); drawSheetLockup();
   drawSkeleton(GLYPHS[panel.glyph], origin, LOCKUP.base, s, 0.85);
   let labelX = 0, labelY = 0, labelDY = 0, labelAlign = 0;
@@ -865,12 +864,12 @@ function composePanel(i, t) {
   seg(x0, y0, x1, y0, 0.6); seg(x0, y0, x0, y1, 0.6); seg(x1, y0, x1, y1, 0.6); seg(x0, y1, x1, y1, 0.6);
   const tab = progress(t, t0 + CUE.panelTab, t0 + CUE.panelTab + 0.1);
   if (tab > 0) {
-    const tw = 56 + textWidth(panel.line1, panel.line1.length, 12) + 20, ty0 = CONTENT.y1 - 60;
-    paintInk(LAYER.letters); rect(x0, ty0, x0 + tw * easeOutExpo(tab), CONTENT.y1);
+    const tw = 56 + textWidth(panel.line1, panel.line1.length, 12) + 20, ty0 = y1 - 48;
+    paintInk(LAYER.letters); rect(panel.x0, ty0, panel.x0 + tw * easeOutExpo(tab), y1);
     paintKnock(LAYER.letters);
-    label(panel.letter, x0 + 16, CONTENT.y1 - 18, 24, t0 + CUE.panelTab);
-    label(panel.line1, x0 + 56, CONTENT.y1 - 34, 12, t0 + CUE.panelTab + 0.02);
-    label(panel.scale, x0 + 56, CONTENT.y1 - 16, 10, t0 + CUE.panelTab + 0.04);
+    label(panel.letter, panel.x0 + 16, y1 - 13, 24, t0 + CUE.panelTab);
+    label(panel.line1, panel.x0 + 56, y1 - 27, 12, t0 + CUE.panelTab + 0.02);
+    label(panel.scale, panel.x0 + 56, y1 - 11, 10, t0 + CUE.panelTab + 0.04);
   }
   unclip();
 }
@@ -878,17 +877,17 @@ function composeTriptych(t) {
   for (let i = 0; i < 3; i++) composePanel(i, t);
 }
 
-const MATRIX_S = 0.084, MATRIX_BASE_DY = 26;
+const MATRIX_S = 0.078 * GRID.row / 136, MATRIX_BASE_DY = Math.round(24 * GRID.row / 136);
 function permutationRows(t, converge) {
   paintInk(LAYER.letters);
-  for (let j = 0; j < 6; j++) {
-    let shift, order, right = j === 0 ? colR(10) + 12 : CONTENT.x1;
+  for (let j = 0; j < ROWS; j++) {
+    let shift, order, right = j === 0 ? colR(COLS - 2) + 12 : CONTENT.x1;
     if (!converge) {
       const v = t - CUE.act3 - j * 0.035;
       right = mix(CONTENT.x0, right, easeWipe(progress(t, CUE.act3 + j * CUE.rowStagger, CUE.act3 + j * CUE.rowStagger + CUE.rowEntry)));
       shift = v < 0 ? 0 : Math.floor(v / BEAT) + easeOutExpo(clamp((v % BEAT) / 0.24));
       if (j & 1) shift = -shift;
-      order = PERMUTATIONS[j];
+      order = PERMUTATIONS[j % PERMUTATIONS.length];
     } else {
       const st = CUE.rowsCut + j * 0.02;
       shift = j * (1 - easeSettle(progress(t, st, st + 0.3))) * (j & 1 ? -1 : 1);
@@ -912,9 +911,9 @@ const TINY = (() => {
   const dx = kx + (GK.x1 + LOCKUP.spaceKD - GD.x0) * s;
   return { s, w, x0, base, kx, dx, zx: dx + (GD.x1 + LOCKUP.spaceDZ - GZ.x0) * s };
 })();
-const MATRIX_D = { row: 2, x: colL(3) + 2 * GRID.colStep + GRID.col / 2 - GD.cx * MATRIX_S, y: rowB(2) - MATRIX_BASE_DY };
+const MATRIX_D = { row: 3, x: colL(4) + GRID.col / 2 - GD.cx * MATRIX_S, y: rowB(3) - MATRIX_BASE_DY };
 const GIANT_D = { s: GIANT_D_SCALE, x: W / 2 - GD.cx * GIANT_D_SCALE, y: CONTENT.y1 - 16 - (OVERSHOOT + PEN_HW) * GIANT_D_SCALE };
-const HIT = { s: LOCKUP.s, base: H / 2 + 500 * LOCKUP.s, kx: (colL(0) + colR(3)) / 2 - GK.cx * LOCKUP.s, dx: (colL(4) + colR(7)) / 2 - GD.cx * LOCKUP.s };
+const HIT = { s: LOCKUP.s, base: H / 2 + 500 * LOCKUP.s, kx: (colL(0) + colR(2)) / 2 - GK.cx * LOCKUP.s, dx: (colL(3) + colR(5)) / 2 - GD.cx * LOCKUP.s };
 const CAM_D_MATRIX = camMap(MATRIX_D.x, MATRIX_D.y, MATRIX_S, GIANT_D.x, GIANT_D.y, GIANT_D.s);
 const CAM_D_TINY = camMap(TINY.dx, TINY.base, TINY.s, GIANT_D.x, GIANT_D.y, GIANT_D.s);
 const CAM_K_TINY = camMap(TINY.kx, TINY.base, TINY.s, GIANT_K.x, GIANT_K.y, GIANT_K.scale);
@@ -944,7 +943,7 @@ function composeHit(t) {
   const settle = 1 - dampedSpring(t - beatAt(BEATS.hit), REG_OMEGA, REG_ZETA);
   fx.regX = MISREGISTER[0] * settle; fx.regY = MISREGISTER[1] * settle;
   const s = LOCKUP.s, cut = pen.cut;
-  const bx0 = colL(8), bx1 = colR(11), by0 = rowT(1), by1 = rowB(4);
+  const bx0 = colL(6), bx1 = colR(7), by0 = rowT(2), by1 = rowB(5);
   if (cut === CUT.none) { pen.cut = CUT.keepLeft; fx.cutX = CONTENT.x1; }
   paintVermilion(LAYER.plate2); rect(bx0, by0, bx1, by1);
   paintKnock(LAYER.plate2); drawGlyph(GZ, (bx0 + bx1) / 2 - GZ.cx * s, HIT.base, s);
@@ -1030,9 +1029,9 @@ function composeActIII(t) {
   if (beat === BEATS.pull2) drawGlyph(GD, HIT.dx, HIT.base, HIT.s);
 }
 
-const VALUE_X = i => colL(i) + TEXT_INSET, VALUE_LABEL_Y = rowT(5) + 18, VALUE_Y = rowT(5) + 56;
+const VALUE_STEP = (CONTENT.x1 - CONTENT.x0) / 6, VALUE_X = i => colL(0) + TEXT_INSET + i * VALUE_STEP, VALUE_LABEL_Y = rowT(6) + 18, VALUE_Y = rowT(6) + 56;
 const VALUES_RIGHT = VALUE_X(VALUES.length - 1) + Math.max(textWidth(VALUES[VALUES.length - 1][0], VALUES[VALUES.length - 1][0].length, 10), textWidth(VALUES[VALUES.length - 1][1], VALUES[VALUES.length - 1][1].length, 24));
-const NOTES_X = colL(8) + TEXT_INSET, NOTES_Y = rowT(4) + 30, NOTES_LEAD = 18;
+const NOTES_X = colL(0) + TEXT_INSET, NOTES_Y = rowT(0) + 40, NOTES_LEAD = 16;
 const NOTES_W = Math.max(blockWidth(NOTES, 10), textWidth(COPY.notesHead, COPY.notesHead.length, 12));
 function composeActIV(t) {
   composeGrid(t, 0.26, true, true, CROSS_CLEAR.lockup | CROSS_CLEAR.labels);
@@ -1057,7 +1056,7 @@ function composeActIV(t) {
 function composeValues(t0) {
   if (fx.time < t0) return;
   paintInk(LAYER.meta);
-  knockBlock(VALUE_X(0), VALUE_LABEL_Y - 10, VALUES_RIGHT, rowB(5) - TEXT_PAD - 2);
+  knockBlock(VALUE_X(0), VALUE_LABEL_Y - 10, VALUES_RIGHT, rowB(6) - TEXT_PAD - 2);
   for (let i = 0; i < VALUES.length; i++) {
     const x = VALUE_X(i), rt = t0 + i * 0.06;
     paintInk(LAYER.meta, 0.58); label(VALUES[i][0], x, VALUE_LABEL_Y, 10, rt);
@@ -1069,12 +1068,12 @@ function composeNotes(t0) {
   let shown = 0;
   while (shown < NOTES.length && fx.time >= t0 + 0.06 + shown * 0.06) shown++;
   paintInk(LAYER.meta, 0.94);
-  knockBlock(NOTES_X, LOCKUP.base + 8, NOTES_X + NOTES_W, NOTES_Y + (shown ? 4 + shown * NOTES_LEAD : 2));
+  knockBlock(NOTES_X, NOTES_Y - 14, NOTES_X + NOTES_W, NOTES_Y + (shown ? 6 + shown * NOTES_LEAD : 2));
   label(COPY.notesHead, NOTES_X, NOTES_Y, 12, t0);
   for (let i = 0; i < NOTES.length; i++) label(NOTES[i], NOTES_X, NOTES_Y + 22 + i * NOTES_LEAD, 10, t0 + 0.06 + i * 0.06);
 }
 function composeTitleBlock(t) {
-  const x0 = colL(8), x1 = colR(11), y0 = rowT(5), y1 = rowB(5), h = (y1 - y0) / 3, xa = x0 + 276, xb = x0 + 414;
+  const x0 = colL(0), x1 = colR(COLS - 1), y0 = rowT(ROWS - 1), y1 = rowB(ROWS - 1), h = (y1 - y0) / 3, xa = x0 + 468, xb = x0 + 702;
   const p = easeSettle(progress(t, CUE.titleBlock, CUE.titleBlock + 0.6));
   if (p <= 0) return;
   paintInk(LAYER.meta, 0.8);
@@ -1084,17 +1083,17 @@ function composeTitleBlock(t) {
   lineP(xa, y0, xa, y0 + 2 * h, p, 0.45); lineP(xb, y0, xb, y0 + h, p, 0.45);
   for (let i = 0; i < TITLE_BLOCK.length; i++) {
     const c = TITLE_BLOCK[i], cx = x0 + c[0] + 8, cy = y0 + c[1] * h, rt = CUE.titleBlock + 0.2 + i * 0.05;
-    paintInk(LAYER.meta, 0.58); label(c[2], cx, cy + 16, 10, rt);
-    paintInk(LAYER.meta, 0.96); label(c[3], cx, cy + 37, 13, rt + 0.05);
+    paintInk(LAYER.meta, 0.58); label(c[2], cx, cy + 12, 9, rt);
+    paintInk(LAYER.meta, 0.96); label(c[3], cx, cy + 26, 12, rt + 0.05);
   }
 }
 function composeCursor(t) {
   const cp = progress(t, CUE.cursor, CUE.cursorEnd);
   if (cp <= 0 || cp >= 1) return;
   const x = mix(colL(0), colR(7), easeInOutSine(cp)), a = CURSOR_ALPHA * Math.min(1, (t - CUE.cursor) / CUE.cursorFade, (CUE.cursorEnd - t) / CUE.cursorFade);
-  paintInk(LAYER.construction, a); seg(x, rowB(0) - 88, x, LOCKUP.base + 16, 0.5);
+  paintInk(LAYER.construction, a); seg(x, rowT(1), x, LOCKUP.base + 16, 0.5);
   paintInk(LAYER.meta, a);
-  nbReset(); nbText('X '); nbSigned((x - LOCKUP.kx) / LOCKUP.s, 4, 0); nbDraw(x + 8, rowB(0) - 76, 10);
+  nbReset(); nbText('X '); nbSigned((x - LOCKUP.kx) / LOCKUP.s, 4, 0); nbDraw(x + 8, rowT(1) + 14, 10);
 }
 
 /* ── composition: frame, header, footer ─────────────────── */
@@ -1115,23 +1114,24 @@ function composeFrame(t, cycle) {
   let h = 0;
   for (let i = 1; i < HEADER.length; i++) if (cycle >= HEADER[i].at) h = i;
   paintInk(LAYER.meta, 0.94);
-  label(COPY.header, colL(0), 58, 12);
-  label(HEADER[h].caption, colL(4), 58, 12);
-  label(HEADER[h].act, colR(11), 58, 12, STATIC, 1);
-  if (cycle >= CUE.titleBlock) label(COPY.footerScale, colL(0), 1034, 12, CUE.titleBlock);
-  else label(COPY.footer, colL(0), 1034, 12, CUE.lead - DURATION);
-  nbReset(); nbText('PARALLAX X'); nbSigned(parallax.x, 1, 2); nbText(' Y'); nbSigned(parallax.y, 1, 2); nbDraw(colL(4), 1034, 12);
+  label(COPY.header, colL(0), 36, 12);
+  label(HEADER[h].act, colR(COLS - 1), 36, 12, STATIC, 1);
+  label(HEADER[h].caption, colL(0), 58, 12);
   nbReset();
-  if (cycle >= CUE.act3 && cycle < CUE.act4) { nbText('BEAT '); nbInt(Math.min(BEATS.count - 1, Math.floor((cycle - CUE.act3) / BEAT)) + 1, 1); nbText(COPY.beatTail); nbDraw(colL(8), 1034, 12); }
-  else label(COPY.loop, colL(8), 1034, 12);
+  if (cycle >= CUE.act3 && cycle < CUE.act4) { nbText('BEAT '); nbInt(Math.min(BEATS.count - 1, Math.floor((cycle - CUE.act3) / BEAT)) + 1, 1); nbText(COPY.beatTail); nbDraw(colR(COLS - 1), 58, 12, 1); }
+  else label(COPY.loop, colR(COLS - 1), 58, 12, STATIC, 1);
+  const fy = H - 46;
+  if (cycle >= CUE.titleBlock) label(COPY.footerScale, colL(0), fy, 12, CUE.titleBlock);
+  else label(COPY.footer, colL(0), fy, 12, CUE.lead - DURATION);
+  nbReset(); nbText('PARALLAX X'); nbSigned(parallax.x, 1, 2); nbText(' Y'); nbSigned(parallax.y, 1, 2); nbDraw(colL(4), fy, 12);
   const frames = Math.floor(t * 25);
-  nbReset(); nbText('TC 00:00:'); nbInt(frames / 25, 2); nbText(':'); nbInt(frames % 25, 2); nbDraw(colR(11), 1034, 12, 1);
+  nbReset(); nbText('TC 00:00:'); nbInt(frames / 25, 2); nbText(':'); nbInt(frames % 25, 2); nbDraw(colR(COLS - 1), fy, 12, 1);
 }
 function composeNumeral(t, cycle) {
   const act = cycle < CUE.act2 ? 0 : cycle < CUE.act3 ? 1 : cycle < CUE.act4 ? 2 : 3;
-  if (fx.halftone > 0) { paintKnock(LAYER.letters); rect(colL(11), CONTENT.y0, CONTENT.x1, rowB(0)); }
+  if (fx.halftone > 0) { paintKnock(LAYER.letters); rect(colL(COLS - 1), CONTENT.y0, CONTENT.x1, rowB(0)); }
   paintInk(LAYER.meta, 0.94);
-  label(NUMERALS[act], colR(11) - TEXT_INSET, rowB(0) - 8, 36, STATIC, 1);
+  label(NUMERALS[act], colR(COLS - 1) - TEXT_INSET, rowB(0) - 8, 36, STATIC, 1);
 }
 
 const exitEdge = t => {
@@ -1203,7 +1203,7 @@ void main() {
   vTexture = textured > .5 ? seed + 1. : 0.;
   vec2 screen = p + uOffset[layer];
   vScreenX = screen.x;
-  vec2 ndc = screen / vec2(1920., 1080.);
+  vec2 ndc = screen / vec2(${W}., ${H}.);
   gl_Position = vec4(ndc.x * 2. - 1., 1. - ndc.y * 2., 0., 1.);
 }`;
 const FS_PRIM = textured => `#version 300 es
@@ -1322,7 +1322,7 @@ in vec2 vUv;
 out vec4 o;
 void main() {
   vec4 s = texture(uScene, vUv);
-  vec2 p = vec2(vUv.x, 1. - vUv.y) * vec2(1920., 1080.);
+  vec2 p = vec2(vUv.x, 1. - vUv.y) * vec2(${W}., ${H}.);
   vec2 g = mat2(.70710678, .70710678, -.70710678, .70710678) * p / uCell;
   float spot = .5 + .25 * (1.14 * cos(6.28318531 * g.x) + .86 * cos(6.28318531 * g.y));
   float tone = s.b + .16 * s.b * (1. - s.b);
@@ -1365,17 +1365,17 @@ uniform float uMotion;
 in vec2 vUv;
 out vec4 o;
 void main() {
-  vec2 d = vUv - .5, a = d * vec2(1.77777778, 1.), e = abs(d);
-  float r2 = dot(a, a) / 1.0401235;
+  vec2 d = vUv - .5, a = d * vec2(${(W / H).toFixed(8)}, 1.), e = abs(d);
+  float r2 = dot(a, a) / ${((W / H) * (W / H) * 0.25 + 0.25).toFixed(7)};
   vec2 inLo = smoothstep(uExempt.xy - .012, uExempt.xy, vUv), inHi = 1. - smoothstep(uExempt.zw, uExempt.zw + .012, vUv);
   float field = (1. - smoothstep(.43, .445, max(e.x, e.y))) * (1. - inLo.x * inLo.y * inHi.x * inHi.y);
   float base = (1. + uK * r2) / (1. + uK), spread = (uCA + uLoupe * field) * r2 * r2;
   float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
   vec3 c = vec3(0.);
-  vec2 v = uMotion > .5 ? (vec2(vUv.x, 1. - vUv.y) * vec2(1920., 1080.) * uBlur.x + uBlur.yz) * field : vec2(0.);
-  float blurPx = length(v) * uSize.x / 1920.;
+  vec2 v = uMotion > .5 ? (vec2(vUv.x, 1. - vUv.y) * vec2(${W}., ${H}.) * uBlur.x + uBlur.yz) * field : vec2(0.);
+  float blurPx = length(v) * uSize.x / ${W}.;
   if (blurPx > 1.) {
-    vec2 blur = vec2(v.x / 1920., -v.y / 1080.);
+    vec2 blur = vec2(v.x / ${W}., -v.y / ${H}.);
     float ft = float(uBlurTaps), shuffle = fract(n * 7.31 + .37), neutral = clamp(blurPx * .25, 0., 1.);
     vec3 weight = vec3(0.);
     for (int i = 0; i < 16; i++) {
@@ -1486,7 +1486,7 @@ function initGL() {
   gl.useProgram(renderer.lens.p);
   gl.uniform1i(renderer.lens.u.uImage, 0); gl.uniform3fv(renderer.lens.u.uWeights, SPECTRAL_WEIGHTS);
   gl.uniform1f(renderer.lens.u.uK, LENS.k); gl.uniform1f(renderer.lens.u.uCA, LENS.ca);
-  gl.uniform4f(renderer.lens.u.uExempt, colL(11) / W, 1 - rowB(0) / H, CONTENT.x1 / W, 1 - CONTENT.y0 / H);
+  gl.uniform4f(renderer.lens.u.uExempt, colL(COLS - 1) / W, 1 - rowB(0) / H, CONTENT.x1 / W, 1 - CONTENT.y0 / H);
   timer.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
   timer.queries.length = 0; timer.busy.fill(0); timer.head = 0; timer.gpuMs = 0; timer.at = -1e9;
   if (timer.ext) for (let i = 0; i < 4; i++) timer.queries.push(gl.createQuery());
@@ -1826,6 +1826,9 @@ function boot() {
   }
   return false;
 }
+api.time = () => { const t = clock.frozen !== null ? clock.frozen : (reducedMotion.matches ? CUE.idleStill : clock.time); return t >= CUE.lead ? t - DURATION : t; };
+api.rawTime = () => clock.frozen !== null ? clock.frozen : clock.time;
+api.cues = CUE; api.beat = BEAT; api.beats = BEATS; api.beatAt = beatAt; api.duration = DURATION;
 api.start = () => { wantRunning = true; if (boot()) { view.dirty = true; start(); } };
 api.stop = () => { wantRunning = false; stop(); };
 api.running = () => clock.raf !== 0;
