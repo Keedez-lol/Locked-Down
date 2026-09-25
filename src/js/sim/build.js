@@ -57,7 +57,8 @@ function sfx(name, inst) {
 function fx(kind, inst, n) {
   const P = LD.Particles; if (!P || typeof P.emit !== 'function') return;
   const d = defOf(inst), s = d ? sizeOf(d) : 1;
-  try { P.emit(kind, inst.x + s / 2, inst.y + s / 2, { n, layer: inst.layer, size: s }); } catch (e) { /* particles are optional */ }
+  const T = (LD.Render && LD.Render.TILE) || 48;
+  try { P.emit(kind, (inst.x + s / 2) * T, (inst.y + s / 2) * T, { n, layer: inst.layer, size: s * T }); } catch (e) { /* particles are optional */ }
 }
 function toast(text, kind, key, ms) { if (!gate(timers.toast, key || text, ms || 1500)) return; E.emit('toast', { text, kind: kind || 'info' }); }
 function log(text, kind, key, ms) { if (key && !gate(timers.log, key, ms || 1500)) return; if (LD.State && LD.State.log) LD.State.log(text, kind || 'info'); }
