@@ -140,9 +140,8 @@ M.init = r => {
   const tb = el('div.menu-tb', [tbCell('DWG NO.', 'KDZ-DUSTRY'), tbCell('REV', 'A'), tbCell('VER', LD.VERSION || VERSION), contCell, seedCell]);
   const hint = el('div.menu-hint', [UI().keycap('↑'), UI().keycap('↓'), el('span', 'navegar'), el('i'), UI().keycap('↵'), el('span', 'seleccionar'), el('i'), UI().keycap('Esc'), el('span', 'cerrar')]);
   slab = el('aside.menu-slab', { 'aria-label': 'Menú principal' }, [
-    el('div.menu-eyebrow', [el('span.menu-eyebrow-k', 'KDZ / DUSTRY'), el('span', '— Simulador industrial de estratos')]),
+    el('div.menu-eyebrow', [el('span.menu-eyebrow-k', 'KDZ / DUSTRY')]),
     canvas,
-    el('div.menu-caption', [el('span', 'FIG. 1'), el('span', 'Lockup · monolínea esténcil'), el('span', 'Trazo 40 / Hueco 60')]),
     nav.el,
     el('div.menu-foot', [tb, hint])
   ]);

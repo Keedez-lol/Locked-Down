@@ -218,7 +218,7 @@ const PERMUTATIONS = [[0, 1, 2], [0, 2, 1], [1, 2, 0], [2, 1, 0], [2, 0, 1], [1,
 const IN_ORDER = [0, 1, 2];
 const COPY = {
   header: 'KDZ / STENCIL MONOLINE / TYPE SPECIMEN',
-  footer: 'DWG NO. KDZ-001   REV D   SCALE 1:1', footerScale: 'SCALE 1:1',
+  footer: 'DWG NO. KDZ-001   REV D', footerScale: '',
   loop: 'LOOP ' + DURATION.toFixed(2) + ' S',
   capLine: 'CAP LINE  1000', baseLine: 'BASELINE  0', capName: 'CAP LINE', baseName: 'BASELINE',
   stroke: 'STROKE ' + 2 * PEN_HW, gap: 'GAP ' + GAP, overshoot: 'O/S +' + OVERSHOOT, radius: 'R ' + D.r,
@@ -1121,8 +1121,7 @@ function composeFrame(t, cycle) {
   if (cycle >= CUE.act3 && cycle < CUE.act4) { nbText('BEAT '); nbInt(Math.min(BEATS.count - 1, Math.floor((cycle - CUE.act3) / BEAT)) + 1, 1); nbText(COPY.beatTail); nbDraw(colR(COLS - 1), 58, 12, 1); }
   else label(COPY.loop, colR(COLS - 1), 58, 12, STATIC, 1);
   const fy = H - 46;
-  if (cycle >= CUE.titleBlock) label(COPY.footerScale, colL(0), fy, 12, CUE.titleBlock);
-  else label(COPY.footer, colL(0), fy, 12, CUE.lead - DURATION);
+  if (cycle < CUE.titleBlock) label(COPY.footer, colL(0), fy, 12, CUE.lead - DURATION);
   nbReset(); nbText('PARALLAX X'); nbSigned(parallax.x, 1, 2); nbText(' Y'); nbSigned(parallax.y, 1, 2); nbDraw(colL(4), fy, 12);
   const frames = Math.floor(t * 25);
   nbReset(); nbText('TC 00:00:'); nbInt(frames / 25, 2); nbText(':'); nbInt(frames % 25, 2); nbDraw(colR(COLS - 1), fy, 12, 1);
