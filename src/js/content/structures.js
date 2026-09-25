@@ -145,7 +145,7 @@ S('gather_hut', 'Refugio del recolector', 'nature', 0, 2, 'gather_hut', 'farm', 
   cost: { stick: 10, plant_fiber: 8, rope: 2 }, buildTime: 3, hp: 300, surfaceOnly: true, nature: { kind: 'gather', radius: 4, rate: 0.25 },
   desc: 'Cabaña desde la que se recogen varas, fibra, piedra y sílex de las casillas naturales en un radio de 4. Un objeto cada 4 s.' });
 S('woodcutter', 'Cabaña del leñador', 'nature', 0, 2, 'woodcutter', 'saw', {
-  cost: { plank: 8, stick: 6, rope: 3, hand_tool: 1 }, buildTime: 4, hp: 300, surfaceOnly: true, nature: { kind: 'woodcutter', radius: 5, rate: 0.4 },
+  cost: { plank: 8, stick: 6, rope: 3, hand_tool: 1 }, buildTime: 4, hp: 300, surfaceOnly: true, nature: { kind: 'woodcutter', radius: 5, rate: 0.4, out: { wood_log: 0.4 }, byproducts: { resin: 0.05 } },
   desc: 'Tala los árboles maduros en un radio de 5 y deja que rebroten. Troncos y, a veces, resina.' });
 S('hunting_lodge', 'Cabaña de caza', 'nature', 0, 2, 'hunting_lodge', 'farm', {
   cost: { plank: 10, stick: 8, rope: 4, hand_tool: 1 }, buildTime: 4, hp: 300, surfaceOnly: true, nature: { kind: 'hunt', radius: 6, out: { hide: 0.05, bone: 0.04, sinew: 0.03 } },
@@ -283,7 +283,7 @@ S('steam_hammer', 'Martillo de vapor', 'process', 2, 2, 'steam_hammer', 'hammer'
   cost: { boiler: 1, piston: 2, steel_frame: 1, iron_plate: 8, steel_gear: 2 }, buildTime: 8, hp: 800, complexity: 3, types: ['forging'], power: { use: 12e3 },
   desc: 'Martillo pilón de vapor. Forja acero e inoxidable, cabezales y pistones; consume 12 kW.' });
 S('blast_furnace', 'Alto horno', 'process', 2, 3, 'blast_furnace', 'furnace', {
-  cost: { brick: 60, steel_plate: 12, iron_frame: 4, bellows: 2, valve: 2, stone: 30 }, buildTime: 12, hp: 1500, complexity: 3, types: ['blast'], burn: { mjPerSec: 0.1, fuels: ['coke', 'coal'] }, power: { use: 20e3 }, light: LAMP(4, '#ff7a20', 0.7),
+  cost: { brick: 60, iron_plate: 16, iron_frame: 4, bellows: 2, valve: 2, stone: 30 }, buildTime: 12, hp: 1500, complexity: 3, types: ['blast'], burn: { mjPerSec: 0.1, fuels: ['coke', 'coal'] }, power: { use: 20e3 }, light: LAMP(4, '#ff7a20', 0.7),
   desc: 'Cuba de ladrillo con soplantes. Reduce hierro y produce acero con coque; quema 0,1 MJ/s y consume 20 kW en las soplantes.',
   lore: 'La primera colada iluminó la noche entera. La segunda ya no la miró nadie.' });
 S('coke_oven', 'Horno de coque', 'process', 2, 2, 'coke_oven', 'furnace', {
@@ -296,13 +296,13 @@ S('press', 'Prensa hidráulica', 'process', 3, 2, 'press', 'press', {
   cost: { piston: 4, steel_frame: 2, steel_plate: 12, motor: 1, circuit_basic: 1 }, buildTime: 10, hp: 900, complexity: 3, types: ['pressing'], power: { use: 25e3 },
   desc: 'Prensa de doble efecto. Lamina placas, álabes, electrodos y losas; consume 25 kW.' });
 S('lathe', 'Torno', 'process', 3, 1, 'lathe', 'lathe', {
-  cost: { motor: 1, steel_frame: 1, bearing: 2, steel_gear: 2, circuit_basic: 1 }, buildTime: 8, hp: 600, complexity: 3, types: ['lathe'], power: { use: 20e3 },
+  cost: { motor: 1, steel_frame: 1, steel_gear: 4, steel_rod: 2, circuit_basic: 1 }, buildTime: 8, hp: 600, complexity: 3, types: ['lathe'], power: { use: 20e3 },
   desc: 'Torno paralelo de precisión. Rodamientos, varillas, obleas y gemas talladas; consume 20 kW.' });
 S('wiremill', 'Trefiladora', 'process', 3, 1, 'wiremill', 'wiremill', {
   cost: { motor: 1, steel_frame: 1, steel_gear: 4, bearing: 2, circuit_basic: 1 }, buildTime: 8, hp: 600, complexity: 3, types: ['wiremill'], power: { use: 18e3 },
   desc: 'Hileras de carburo en cascada. Estira hilo de cobre, oro, aluminio y tungsteno, y fibra de vidrio; consume 18 kW.' });
 S('assembler', 'Ensambladora', 'process', 3, 2, 'assembler', 'assembler', {
-  cost: { motor: 2, steel_frame: 2, circuit_basic: 4, steel_plate: 8, mechanism: 2 }, buildTime: 12, hp: 900, complexity: 3, types: ['assembling', 'ammo'], power: { use: 40e3 },
+  cost: { steel_gear: 4, steel_frame: 2, circuit_basic: 4, steel_plate: 8, mechanism: 2 }, buildTime: 12, hp: 900, complexity: 3, types: ['assembling', 'ammo'], power: { use: 40e3 },
   desc: 'Línea de montaje con brazos y útiles intercambiables. Motores, circuitos, turbinas y munición; consume 40 kW.' });
 S('electric_furnace', 'Horno eléctrico', 'process', 3, 1, 'electric_furnace', 'electric_hum', {
   cost: { steel_frame: 1, brick: 24, copper_wire: 12, circuit_basic: 2, ceramic: 6 }, buildTime: 10, hp: 700, complexity: 3, types: ['smelting'], power: { use: 30e3 }, light: LAMP(2, '#ffc070', 0.4),
@@ -314,19 +314,19 @@ S('distillery', 'Destilería', 'process', 3, 2, 'distillery', 'boiler', {
   cost: { boiler: 1, steel_pipe: 8, valve: 4, steel_plate: 8, copper_plate: 6, circuit_basic: 1 }, buildTime: 12, hp: 800, complexity: 3, types: ['distilling'], power: { use: 30e3 },
   desc: 'Columna de platos con condensador de cobre. Fracciona crudo y alquitrán y destila etanol y biocombustible; consume 30 kW.' });
 S('chemical_plant', 'Planta química', 'process', 4, 3, 'chemical_plant', 'chemical', {
-  cost: { heat_exchanger: 2, stainless_plate: 12, steel_frame: 3, steel_pipe: 8, valve: 6, circuit_advanced: 2, pump_mechanism: 1 }, buildTime: 18, hp: 1600, complexity: 4, types: ['chemical'], power: { use: 120e3 },
+  cost: { heat_exchanger: 2, stainless_plate: 12, steel_frame: 3, steel_pipe: 8, valve: 6, circuit_basic: 4, pump_mechanism: 1 }, buildTime: 18, hp: 1600, complexity: 4, types: ['chemical'], power: { use: 120e3 },
   desc: 'Reactores de inoxidable con intercambiadores. Ácidos, amoniaco, plástico, caucho y la conversión del uranio; consume 120 kW.' });
 S('refinery', 'Refinería', 'process', 4, 3, 'refinery', 'refinery', {
   cost: { heat_exchanger: 3, stainless_plate: 16, steel_frame: 4, steel_pipe: 12, valve: 8, circuit_advanced: 2, pump_mechanism: 2, concrete: 20 }, buildTime: 20, hp: 1800, complexity: 4, types: ['refining'], power: { use: 150e3 }, light: LAMP(3, '#ffb060', 0.3),
   desc: 'Torre de fraccionamiento y craqueador catalítico. Rendimiento completo del crudo con lubricante y betún; consume 150 kW.' });
 S('electrolyzer', 'Electrolizador', 'process', 4, 2, 'electrolyzer', 'electrolyzer', {
-  cost: { graphite_electrode: 4, stainless_plate: 8, steel_frame: 2, circuit_advanced: 2, aluminium_wire: 8, plastic: 4 }, buildTime: 15, hp: 1000, complexity: 3, types: ['electrolysis'], power: { use: 200e3 },
+  cost: { graphite_electrode: 4, stainless_plate: 8, steel_frame: 2, circuit_basic: 4, copper_wire: 12, plastic: 4 }, buildTime: 15, hp: 1000, complexity: 3, types: ['electrolysis'], power: { use: 200e3 },
   desc: 'Celdas con electrodos de grafito. Hidrógeno, cloro, aluminio, litio y zinc electrolítico; consume 200 kW o más según el proceso.' });
 S('centrifuge', 'Centrifugadora', 'process', 4, 2, 'centrifuge', 'centrifuge', {
   cost: { motor: 2, bearing: 8, stainless_plate: 8, steel_frame: 2, circuit_advanced: 2, aluminium_plate: 4 }, buildTime: 14, hp: 900, complexity: 3, types: ['centrifuge'], power: { use: 100e3 },
   desc: 'Rotor de alta velocidad sobre rodamientos. Separa aire, salmuera de deuterio y concentrados de platino; consume 100 kW.' });
 S('compressor', 'Compresor', 'process', 4, 1, 'compressor', 'compressor', {
-  cost: { piston: 4, motor: 1, steel_pipe: 4, steel_plate: 6, valve: 2, circuit_advanced: 1 }, buildTime: 10, hp: 700, complexity: 3, types: ['compressing'], power: { use: 60e3 },
+  cost: { piston: 4, motor: 1, steel_pipe: 4, steel_plate: 6, valve: 2, circuit_basic: 2 }, buildTime: 10, hp: 700, complexity: 3, types: ['compressing'], power: { use: 60e3 },
   desc: 'Compresor alternativo de varias etapas. Aire comprimido y diamante sintético a alta presión; consume 60 kW.' });
 S('arc_furnace', 'Horno de arco', 'process', 5, 3, 'arc_furnace', 'arc', {
   cost: { graphite_electrode: 8, refractory_brick: 40, steel_frame: 4, transformer_core: 4, stainless_plate: 16, circuit_advanced: 4, heat_exchanger: 2 }, buildTime: 24, hp: 2000, complexity: 4, types: ['arc'], power: { use: 1.2e6 }, light: LAMP(4, '#dfe8ff', 0.8),
@@ -414,7 +414,7 @@ S('lab_industrial', 'Laboratorio industrial', 'research', 4, 3, 'lab_industrial'
   cost: { steel_frame: 4, glass: 12, circuit_advanced: 6, sensor: 2, transformer_core: 1, plastic: 8, concrete: 16 }, buildTime: 18, hp: 1400, complexity: 3, types: ['research'], lab: { tier: 2 }, power: { use: 200e3 },
   desc: 'Nave con campanas de extracción y sala de instrumentos. Ciencia química y nuclear; tecnologías hasta nivel 2; consume 200 kW.' });
 S('lab_quantum', 'Laboratorio cuántico', 'research', 6, 3, 'lab_quantum', 'quantum', {
-  cost: { titanium_frame: 6, processor: 12, superconductor_wire: 8, fiber_optic: 8, lithium_cell: 6, sensor: 6, reinforced_concrete: 30, heat_exchanger: 2 }, buildTime: 35, hp: 2400, complexity: 4, types: ['research'], lab: { tier: 3 }, power: { use: 5e6 }, light: LAMP(3, '#b28cff', 0.5),
+  cost: { titanium_frame: 6, processor: 12, transformer_core: 4, fiber_optic: 8, lithium_cell: 6, sensor: 6, reinforced_concrete: 30, heat_exchanger: 2 }, buildTime: 35, hp: 2400, complexity: 4, types: ['research'], lab: { tier: 3 }, power: { use: 5e6 }, light: LAMP(3, '#b28cff', 0.5),
   desc: 'Cámara aislada con criostato y computación superconductora. Ciencia cuántica; cualquier tecnología; consume 5 MW.',
   lore: 'Trabaja a diez milikelvin sobre un océano de magma. Los ingenieros llaman a eso equilibrio.' });
 

@@ -1,0 +1,12 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+const errs = []; p.on('pageerror', e => errs.push(e.message));
+await p.goto('file://' + process.cwd() + '/dist/index.html');
+await p.waitForFunction(() => window.LD && LD.Main && LD.Main.ready, null, { timeout: 60000 });
+await p.mouse.click(300, 300); await p.waitForTimeout(300);
+await p.evaluate(() => { LD.Settings.set({ tutorial: false }); LD.Main.startNewGame({ name: 'Loops', difficulty: 'normal', seed: 3 }); const D = LD.Debug, G = LD.G, hub = Object.values(G.structures).find(s => s.id === 'hub'); D.giveAll(500); D.unlockAll(); for (let i = -1; i < 6; i++) D.place('conveyor_wood', 0, hub.x + 3, hub.y + i); D.place('stone_furnace', 0, hub.x + 4, hub.y); D.place('crusher', 0, hub.x + 4, hub.y + 2); D.place('cable_copper', 0, hub.x + 4, hub.y + 4); D.place('steam_engine', 0, hub.x + 4, hub.y + 5); const f = Object.values(G.structures).find(s => s.id === 'stone_furnace'); LD.Sim.Economy.setRecipe(f.uid, 'smelting_copper_ore'); const c = Object.values(G.structures).find(s => s.id === 'crusher'); LD.Sim.Economy.setRecipe(c.uid, LD.Sim.Economy.availableRecipes(c.uid)[0].id); D.ff(5); });
+await p.waitForTimeout(2000);
+const r = await p.evaluate(() => { const G = LD.G; const st = {}; for (const s of Object.values(G.structures)) st[s.id] = s.state + (s.reason ? ' (' + s.reason + ')' : ''); return { stats: LD.Audio.stats, visible: LD.Render.visibleStructures().length, st, keys: LD.Audio.keys && LD.Audio.keys.loops && LD.Audio.keys.loops.length }; });
+console.log(JSON.stringify(r, null, 1)); console.log(errs);
+await b.close();

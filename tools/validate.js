@@ -47,6 +47,8 @@ for (const rc of R.recipes.values()) {
 /* deposits & nature & drops as sources */
 for (const L of R.layers) for (const d of (L.deposits || [])) { if (!R.items.has(d.res)) err(`layer ${L.idx}: deposit res ${d.res} unknown`); else addSrc(d.res, 'deposit:L' + L.idx); }
 for (const t of R.terrains.values()) if (t.natural && t.natural.item) { if (!R.items.has(t.natural.item)) err(`terrain ${t.id}: natural item unknown`); else addSrc(t.natural.item, 'terrain:' + t.id); }
+/* hand-gather extras implemented in sim/nature.js: forest alternates sticks and logs, rock yields flint 20 % */
+if (R.items.has('wood_log')) addSrc('wood_log', 'terrain:forest'); if (R.items.has('flint')) addSrc('flint', 'terrain:rock');
 for (const e of R.enemies.values()) for (const k in (e.drops || {})) { if (!R.items.has(k)) err(`enemy ${e.id}: drop ${k} unknown`); else addSrc(k, 'drop:' + e.id); }
 for (const s of R.structures.values()) if (s.nature && s.nature.out) for (const k in s.nature.out) { if (!R.items.has(k)) err(`structure ${s.id}: nature out ${k} unknown`); else addSrc(k, 'nature:' + s.id); }
 for (const s of R.structures.values()) if (s.borer) { addSrc('stone', 'borer:' + s.id); if (R.items.has('gravel')) addSrc('gravel', 'borer:' + s.id); }
@@ -140,19 +142,24 @@ for (const t of R.techs.values()) visit(t.id, []);
 /* progression feasibility: simulate unlocking with obtainable items */
 const unlockedS = new Set(start.structures), unlockedR = new Set(start.recipes), done = new Set();
 const canMake = new Set();
+/* strict buildability: a structure counts only once every cost item is makeable (catches cost cycles) */
+const builtS = new Set();
+const buildable = sid => { const st = R.structures.get(sid); return !!st && Object.keys(st.cost || {}).every(k => canMake.has(k)); };
+const layerOpen = L => L === 0 || [...builtS].some(sid => { const st = R.structures.get(sid); return st && st.shaft && st.shaft.layer >= L; });
 const recompute = () => {
   let changed = true;
   while (changed) {
     changed = false;
+    for (const sid of unlockedS) if (!builtS.has(sid) && buildable(sid)) { builtS.add(sid); changed = true; }
     for (const [id, srcs] of obtainable) {
       if (canMake.has(id)) continue;
       const ok = srcs.some(s => {
-        if (s.startsWith('recipe:')) { const rc = R.recipes.get(s.slice(7)); if (!unlockedR.has(rc.id)) return false; const machineOk = [...unlockedS].some(sid => { const st = R.structures.get(sid); return st && st.types && st.types.includes(rc.type); }); if (!machineOk) return false; return Object.keys(rc.in).every(k => canMake.has(k)); }
-        if (s.startsWith('nature:')) return unlockedS.has(s.slice(7));
-        if (s.startsWith('deposit:')) { const L = +s.slice(9); const dep = R.layers[L].deposits.find(d => d.res === id); const layerOpen = L === 0 || [...unlockedS].some(sid => { const st = R.structures.get(sid); return st && st.shaft && st.shaft.layer >= L && Object.keys(st.cost).every(k => canMake.has(k)); }); if (!layerOpen) return false; return [...unlockedS].some(sid => { const st = R.structures.get(sid); return st && st.extract && st.extract.hardnessMax >= (dep.hardness || 0) && (!st.extract.fluids === !dep.fluid) && Object.keys(st.cost).every(k => canMake.has(k)); }); }
+        if (s.startsWith('recipe:')) { const rc = R.recipes.get(s.slice(7)); if (!unlockedR.has(rc.id)) return false; const machineOk = [...builtS].some(sid => { const st = R.structures.get(sid); return st && st.types && st.types.includes(rc.type); }); if (!machineOk) return false; return Object.keys(rc.in).every(k => canMake.has(k)); }
+        if (s.startsWith('nature:')) return builtS.has(s.slice(7));
+        if (s.startsWith('deposit:')) { const L = +s.slice(9); const dep = R.layers[L].deposits.find(d => d.res === id); if (!layerOpen(L)) return false; return [...builtS].some(sid => { const st = R.structures.get(sid); return st && st.extract && st.extract.hardnessMax >= (dep.hardness || 0) && (!st.extract.fluids === !dep.fluid); }); }
         if (s.startsWith('terrain:')) return true;
-        if (s.startsWith('borer:')) { const st = R.structures.get(s.slice(6)); return unlockedS.has(st.id) && Object.keys(st.cost).every(k => canMake.has(k)); }
-        if (s.startsWith('drop:')) { const e = R.enemies.get(s.slice(5)); return e.layer === 0 || [...unlockedS].some(sid => { const st = R.structures.get(sid); return st && st.shaft && st.shaft.layer >= e.layer && Object.keys(st.cost).every(k => canMake.has(k)); }); }
+        if (s.startsWith('borer:')) { const st = R.structures.get(s.slice(6)); return builtS.has(st.id); }
+        if (s.startsWith('drop:')) { const e = R.enemies.get(s.slice(5)); return layerOpen(e.layer); }
         return false;
       });
       if (ok) { canMake.add(id); changed = true; }
@@ -174,6 +181,10 @@ const unreached = [...R.techs.values()].filter(t => !done.has(t.id));
 for (const t of unreached) err(`tech ${t.id} unreachable: missing ${Object.keys(t.cost).filter(k => !canMake.has(k)).join(',') || 'prereqs ' + (t.requires || []).filter(r => !done.has(r)).join(',')}`);
 const unmakeable = [...R.items.keys()].filter(id => !canMake.has(id));
 for (const id of unmakeable) err(`item ${id} never makeable through progression`);
+recompute();
+for (const sid of unlockedS) if (!builtS.has(sid) && sid !== 'hub' && sid !== 'elevator') err(`structure ${sid} never buildable through progression: missing ${Object.keys(R.structures.get(sid).cost || {}).filter(k => !canMake.has(k)).join(',')}`);
+/* lab tiers: every tech's required lab must be buildable before the tech (approximation: at some point of the progression) */
+for (const t of R.techs.values()) { const labs = [...R.structures.values()].filter(s => s.lab && s.lab.tier >= (t.lab || 0)); if (!labs.some(l => builtS.has(l.id))) err(`tech ${t.id}: no buildable lab of tier ≥ ${t.lab}`); }
 /* enemies */
 const canonEnemyIds = new Set(canonEnemies.map(e => e.id));
 for (const c of canonEnemies) { const e = R.enemies.get(c.id); if (!e) err(`canon enemy missing ${c.id}`); else if (e.layer !== c.layer) err(`enemy ${c.id}: layer ${e.layer} ≠ ${c.layer}`); }

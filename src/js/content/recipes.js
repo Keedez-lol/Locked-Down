@@ -101,10 +101,10 @@ R('forging_copper_wire', 'forging', 1, { copper_ingot: 1 }, { copper_wire: 2 }, 
 R('forging_bronze_gear', 'forging', 1, { bronze_ingot: 2 }, { bronze_gear: 1 }, 6);
 R('forging_iron_gear', 'forging', 1, { iron_ingot: 2 }, { iron_gear: 1 }, 6);
 R('forging_bronze_pipe', 'forging', 1, { bronze_ingot: 1 }, { bronze_pipe: 1 }, 6);
-R('forging_steel_plate', 'forging', 2, { steel_ingot: 1 }, { steel_plate: 1 }, 6);
-R('forging_steel_rod', 'forging', 2, { steel_ingot: 1 }, { steel_rod: 2 }, 6);
-R('forging_steel_gear', 'forging', 2, { steel_ingot: 2 }, { steel_gear: 1 }, 8);
-R('forging_steel_pipe', 'forging', 2, { steel_ingot: 1 }, { steel_pipe: 1 }, 8);
+R('forging_steel_plate', 'forging', 1, { steel_ingot: 1 }, { steel_plate: 1 }, 6);
+R('forging_steel_rod', 'forging', 1, { steel_ingot: 1 }, { steel_rod: 2 }, 6);
+R('forging_steel_gear', 'forging', 1, { steel_ingot: 2 }, { steel_gear: 1 }, 8);
+R('forging_steel_pipe', 'forging', 1, { steel_ingot: 1 }, { steel_pipe: 1 }, 8);
 R('forging_stainless_plate', 'forging', 2, { stainless_ingot: 1 }, { stainless_plate: 1 }, 8);
 R('forging_drill_head', 'forging', 2, { steel_rod: 2, iron_gear: 1 }, { drill_head: 1 }, 8);
 R('forging_piston', 'forging', 2, { steel_rod: 1, steel_plate: 1, leather: 1 }, { piston: 1 }, 8);
