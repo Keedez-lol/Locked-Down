@@ -1104,10 +1104,6 @@ function composeFrame(t, cycle) {
     const sx = i & 1 ? 1 : -1, sy = i & 2 ? 1 : -1, x = i & 1 ? W - 60 : 60, y = i & 2 ? H - 44 : 44;
     seg(x + sx * 8, y, x + sx * 30, y, 0.6); seg(x, y + sy * 8, x, y + sy * 30, 0.6);
   }
-  for (let i = 0; i < 2; i++) {
-    const x = i ? W - 54 : 54;
-    arc(x, H / 2, 8, 0, TAU, 0.6); seg(x - 13, H / 2, x + 13, H / 2, 0.6); seg(x, H / 2 - 13, x, H / 2 + 13, 0.6);
-  }
   if (fx.cutRule && fx.cutX < CONTENT.x1 + 12 && fx.cutX > CONTENT.x0 - 12) {
     paintInk(LAYER.fixed, 0.8); seg(fx.cutX, CONTENT.y0, fx.cutX, CONTENT.y1, 0.6);
   }
@@ -1151,7 +1147,6 @@ function compose(t) {
   fx.blurA *= steady; fx.blurBx *= steady; fx.blurBy *= steady;
   clearCamera();
   pen.cut = exiting ? CUT.keepLeft : CUT.none;
-  composeNumeral(t, cycle);
   composeFrame(t, cycle);
 }
 
@@ -1485,7 +1480,7 @@ function initGL() {
   gl.useProgram(renderer.lens.p);
   gl.uniform1i(renderer.lens.u.uImage, 0); gl.uniform3fv(renderer.lens.u.uWeights, SPECTRAL_WEIGHTS);
   gl.uniform1f(renderer.lens.u.uK, LENS.k); gl.uniform1f(renderer.lens.u.uCA, LENS.ca);
-  gl.uniform4f(renderer.lens.u.uExempt, colL(COLS - 1) / W, 1 - rowB(0) / H, CONTENT.x1 / W, 1 - CONTENT.y0 / H);
+  gl.uniform4f(renderer.lens.u.uExempt, 2, 2, 2, 2);
   timer.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
   timer.queries.length = 0; timer.busy.fill(0); timer.head = 0; timer.gpuMs = 0; timer.at = -1e9;
   if (timer.ext) for (let i = 0; i < 4; i++) timer.queries.push(gl.createQuery());
