@@ -167,10 +167,11 @@ function plant(x, y, growth) {
 /* ── trees: regrowth and natural seeding (surface only) ── */
 function growTrees(elapsed) {
   const G = LD.G, trees = G.layers[0] && G.layers[0].trees; if (!trees) return;
-  const Tex = LD.Tex, inc = TREE_REGROW * elapsed;
+  const Tex = LD.Tex, inc = TREE_REGROW * elapsed, WL = LD.World && LD.World.layers && LD.World.layers[0], occ = WL && WL.occ, w = WL ? WL.w : 0;
   for (const key in trees) {
     const g = +trees[key];
     if (!(g < 1)) { delete trees[key]; continue; }
+    if (occ) { const c = key.indexOf(','); if (occ[+key.slice(c + 1) * w + +key.slice(0, c)] >= 0) continue; }
     const ng = g + inc;
     if (ng >= 1) delete trees[key]; else trees[key] = ng;
     if (((g * 4) | 0) !== ((ng * 4) | 0) || ng >= 1) { if (Tex && Tex.invalidate) { const c = key.indexOf(','); Tex.invalidate(0, +key.slice(0, c), +key.slice(c + 1)); } }

@@ -215,10 +215,7 @@ const loadSlot = async slot => {
   const G = Mn.continueGame(slot);
   if (G) G.meta.saveName = slot;
 };
-const withSlotState = (slot, fn) => {
-  const prev = LD.G, G = LD.State.load(slot);
-  try { return G ? fn(G) : null; } finally { LD.G = prev; }
-};
+const withSlotState = (slot, fn) => { const G = LD.State.read(slot); return G ? fn(G) : null; };
 const download = (text, filename) => {
   try {
     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
@@ -266,10 +263,10 @@ M.importModal = () => {
 };
 const slotRow = (s, mode, rerender) => {
   const ui = UI(), sum = s.summary, cur = inGame() && LD.G.meta.saveName === s.slot;
-  const row = el('div.slot' + (s.exists ? '' : '.empty') + (cur ? '.current' : ''));
+  const row = el('div.slot' + (s.exists ? '' : '.empty') + (cur ? '.current' : '') + (s.corrupt ? '.corrupt' : ''));
   row.appendChild(el('div.slot-head', [
     el('span.slot-tag.mono', SLOT_NAMES[s.slot] || s.slot.toUpperCase()),
-    sum ? el('span.slot-name', sum.name) : el('span.slot-name.dim', s.exists ? 'Partida sin resumen' : 'Vacía'),
+    sum ? el('span.slot-name', sum.name) : el('span.slot-name.dim', s.corrupt ? 'Partida dañada · no se puede cargar' : s.exists ? 'Partida sin resumen' : 'Vacía'),
     cur ? el('span.slot-cur.mono', 'ACTUAL') : null,
     sum && sum.lastSave ? el('span.slot-date.mono', ui.fmtDate(sum.lastSave)) : null
   ]));
@@ -279,9 +276,9 @@ const slotRow = (s, mode, rerender) => {
     if (s.exists && !(await ui.confirm('Sobrescribir ranura', 'Se reemplazará la partida guardada en ' + SLOT_NAMES[s.slot] + (sum ? ' («' + sum.name + '»)' : '') + '.', { ok: 'Sobrescribir' }))) return;
     if (LD.Main.save(s.slot)) { LD.G.meta.saveName = s.slot; rerender(); }
   } }));
-  else if (s.exists) acts.appendChild(ui.button('Cargar', { primary: true, small: true, onClick: () => loadSlot(s.slot) }));
+  else if (s.exists && !s.corrupt) acts.appendChild(ui.button('Cargar', { primary: true, small: true, onClick: () => loadSlot(s.slot) }));
   if (s.exists) {
-    acts.appendChild(ui.button('Exportar', { small: true, ghost: true, onClick: () => { const str = withSlotState(s.slot, G => LD.State.exportString(G)); if (str) M.exportModal(str, sum && sum.name); else ui.toast('No se pudo leer la partida', 'bad'); } }));
+    if (!s.corrupt) acts.appendChild(ui.button('Exportar', { small: true, ghost: true, onClick: () => { const str = withSlotState(s.slot, G => LD.State.exportString(G)); if (str) M.exportModal(str, sum && sum.name); else ui.toast('No se pudo leer la partida', 'bad'); } }));
     acts.appendChild(ui.button('Borrar', { small: true, danger: true, onClick: async () => {
       if (!(await ui.confirm('Borrar partida', 'Se eliminará la partida de ' + SLOT_NAMES[s.slot] + (sum ? ' («' + sum.name + '»)' : '') + '. Esta acción no se puede deshacer.', { ok: 'Borrar', danger: true }))) return;
       LD.State.deleteSlot(s.slot);

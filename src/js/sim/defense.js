@@ -17,6 +17,8 @@ const damageMatrix = {
 };
 const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 const SQ2 = 1.41421356;
+/* flow field: integer costs 5 (orthogonal) / 7 (diagonal, ≈5·√2) so a bucket queue replaces the heap */
+const F_ORTH = 5, F_DIAG = 7, F_INF = 0x3fffffff, F_BUCKETS = 8;
 
 const Reg = () => LD.Registry, World = () => LD.World, Sim = () => LD.Sim || {};
 const Build = () => Sim().Build, Power = () => Sim().Power, Economy = () => Sim().Economy, Ev = () => Sim().Events, Nature = () => Sim().Nature;
@@ -55,7 +57,7 @@ function layerRT(L) {
   let r = LR[L];
   if (!r) r = LR[L] = {
     L, warned: false, active: false, wno: 0, start: 0, kills: 0, losses: 0, spawned: 0, pending: [], spots: [], list: [], enemyCount: 0,
-    w: 0, h: 0, walk: null, tWalk: null, tIdsLen: -1, hash: null, heap: null, astar: null,
+    w: 0, h: 0, walk: null, tWalk: null, tIdsLen: -1, hash: null, buckets: null, astar: null,
     field: null, fieldValid: false, fieldAt: -1e9, fieldVer: 0, pathsDirty: true, pathsVer: 0,
     targets: [], targetSet: new Set(), tcx: 0, tcy: 0, targetsDirty: true, turrets: [], structCount: 0
   };
@@ -73,8 +75,8 @@ function ensureGrid(r) {
   if (!wl || !wl.terrain) return false;
   const n = wl.w * wl.h;
   if (r.w !== wl.w || r.h !== wl.h || !r.walk) {
-    r.w = wl.w; r.h = wl.h; r.walk = new Uint8Array(n); r.field = new Float32Array(n); r.fieldValid = false;
-    r.hash = makeHash(wl.w, wl.h); r.heap = null; r.astar = null; r.tIdsLen = -1;
+    r.w = wl.w; r.h = wl.h; r.walk = new Uint8Array(n); r.field = new Int32Array(n); r.fieldValid = false;
+    r.hash = makeHash(wl.w, wl.h); r.astar = null; r.tIdsLen = -1;
   }
   const ids = wl.tIds || [];
   if (!r.tWalk || r.tIdsLen !== ids.length) {
@@ -133,26 +135,36 @@ function heapPop(H) {
   return top;
 }
 
-/* ── distance field: multi-source Dijkstra from the hub/elevator ring (8-neighbour, no corner cutting) ── */
+/* ── distance field: multi-source Dijkstra from the hub/elevator ring (8-neighbour, no corner cutting) ──
+   Dial's algorithm: costs are 5/7, so F_BUCKETS circular buckets of pending tiles replace the binary heap (~3× faster on 256×192). */
+function makeBuckets() { const b = []; for (let k = 0; k < F_BUCKETS; k++) b.push({ a: new Int32Array(2048), n: 0 }); return b; }
+function bucketPush(B, i) { if (B.n >= B.a.length) { const na = new Int32Array(B.a.length * 2); na.set(B.a); B.a = na; } B.a[B.n++] = i; }
 function buildField(r, t) {
   buildWalk(r);
-  const w = r.w, h = r.h, n = w * h, dist = r.field, walk = r.walk;
-  if (!r.heap) r.heap = makeHeap(n * 3);
-  const H = r.heap; H.n = 0;
-  dist.fill(Infinity);
-  for (let k = 0; k < r.targets.length; k++) { const tg = r.targets[k], i = tg[1] * w + tg[0]; if (walk[i]) { dist[i] = 0; heapPush(H, i, 0); } }
-  while (H.n > 0) {
-    const i = heapPop(H), d = H.popKey;
-    if (d > dist[i]) continue;
-    const x = i % w, y = (i - x) / w;
-    for (let k = 0; k < 8; k++) {
-      const nx = x + DIRS8[k][0], ny = y + DIRS8[k][1];
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      const j = ny * w + nx;
-      if (!walk[j]) continue;
-      if (k >= 4 && (!walk[y * w + nx] || !walk[ny * w + x])) continue;
-      const nd = d + (k >= 4 ? SQ2 : 1);
-      if (nd < dist[j]) { dist[j] = nd; heapPush(H, j, nd); }
+  const w = r.w, h = r.h, dist = r.field, walk = r.walk;
+  if (!r.buckets) r.buckets = makeBuckets();
+  const buckets = r.buckets;
+  for (let k = 0; k < F_BUCKETS; k++) buckets[k].n = 0;
+  dist.fill(F_INF);
+  let pending = 0;
+  for (let k = 0; k < r.targets.length; k++) { const tg = r.targets[k], i = tg[1] * w + tg[0]; if (walk[i] && dist[i] !== 0) { dist[i] = 0; bucketPush(buckets[0], i); pending++; } }
+  for (let cur = 0; pending > 0; cur++) {
+    const B = buckets[cur & (F_BUCKETS - 1)];
+    while (B.n > 0) {
+      const i = B.a[--B.n]; pending--;
+      const d = dist[i];
+      if (d !== cur) continue;   // stale entry, a shorter route was found later
+      const x = i % w, y = (i - x) / w;
+      const wU = y > 0 && walk[i - w], wD = y < h - 1 && walk[i + w], wL = x > 0 && walk[i - 1], wR = x < w - 1 && walk[i + 1];
+      const d1 = d + F_ORTH, d2 = d + F_DIAG;
+      if (wU && d1 < dist[i - w]) { dist[i - w] = d1; bucketPush(buckets[d1 & (F_BUCKETS - 1)], i - w); pending++; }
+      if (wD && d1 < dist[i + w]) { dist[i + w] = d1; bucketPush(buckets[d1 & (F_BUCKETS - 1)], i + w); pending++; }
+      if (wL && d1 < dist[i - 1]) { dist[i - 1] = d1; bucketPush(buckets[d1 & (F_BUCKETS - 1)], i - 1); pending++; }
+      if (wR && d1 < dist[i + 1]) { dist[i + 1] = d1; bucketPush(buckets[d1 & (F_BUCKETS - 1)], i + 1); pending++; }
+      if (wU && wL && walk[i - w - 1] && d2 < dist[i - w - 1]) { dist[i - w - 1] = d2; bucketPush(buckets[d2 & (F_BUCKETS - 1)], i - w - 1); pending++; }
+      if (wU && wR && walk[i - w + 1] && d2 < dist[i - w + 1]) { dist[i - w + 1] = d2; bucketPush(buckets[d2 & (F_BUCKETS - 1)], i - w + 1); pending++; }
+      if (wD && wL && walk[i + w - 1] && d2 < dist[i + w - 1]) { dist[i + w - 1] = d2; bucketPush(buckets[d2 & (F_BUCKETS - 1)], i + w - 1); pending++; }
+      if (wD && wR && walk[i + w + 1] && d2 < dist[i + w + 1]) { dist[i + w + 1] = d2; bucketPush(buckets[d2 & (F_BUCKETS - 1)], i + w + 1); pending++; }
     }
   }
   r.fieldValid = true; r.fieldAt = t; r.fieldVer++; r.pathsDirty = false;
@@ -163,8 +175,8 @@ function pathFromField(r, e) {
   const w = r.w, h = r.h, dist = r.field, walk = r.walk, path = e.path;
   let x = e.x | 0, y = e.y | 0, i = y * w + x, k = 0;
   if (x < 0 || y < 0 || x >= w || y >= h) { path.length = 0; return false; }
-  if (!(dist[i] < Infinity)) {
-    let best = -1, bd = Infinity;
+  if (dist[i] >= F_INF) {
+    let best = -1, bd = F_INF;
     for (let d = 0; d < 8; d++) {
       const nx = x + DIRS8[d][0], ny = y + DIRS8[d][1];
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
@@ -512,8 +524,7 @@ function moveEnemy(r, e, c, d, dt, t) {
     if (!engageFinal(r, e, c)) { c.lost += dt; if (c.brecha && !c.breachUid && c.lost > LOST_S) e.hp = 0; }
     return;
   }
-  const opp = opportunistic(r, e);
-  if (opp) { e.target = opp.uid; c.lost = 0; return; }
+  if (c.brecha || c.stuck >= STUCK_S) { const opp = opportunistic(r, e); if (opp) { e.target = opp.uid; c.lost = 0; return; } }   // adjacent walls/turrets only when blocked (§7.7)
   const node = e.path[e.pi], last = e.pi === e.path.length - 1;
   let tx = node[0] + 0.5, ty = node[1] + 0.5, dx = tx - e.x, dy = ty - e.y;
   const dist = Math.hypot(dx, dy);
@@ -557,9 +568,10 @@ function updateEnemies(r, dt, t) {
   const G = LD.G, L = r.L, list = r.list, dmgMul = diff().enemyDmg || 1, Rg = Reg();
   const gridOk = ensureGrid(r);
   if (r.targetsDirty) rebuildTargets(r);
-  const wl = WL(L), wlDirty = !!(wl && wl.dirty && wl.dirty.paths);
-  if (useExternalPaths()) { if (r.pathsDirty || wlDirty) { r.pathsVer++; r.pathsDirty = false; if (wl && wl.dirty) wl.dirty.paths = false; } }
+  const wl = WL(L), wlDirty = !!(wl && wl.dirty && wl.dirty.paths), external = useExternalPaths();
+  if (external) { if (r.pathsDirty || wlDirty) { r.pathsVer++; r.pathsDirty = false; if (wl && wl.dirty) wl.dirty.paths = false; } }
   else if (gridOk && (r.pathsDirty || wlDirty || !r.fieldValid || t - r.fieldAt > FIELD_MAX_AGE) && t - r.fieldAt >= FIELD_MIN_S) buildField(r, t);
+  const ver = external ? r.pathsVer : r.fieldVer;
   for (let n = 0; n < list.length; n++) {
     const e = list[n];
     if (e.hp <= 0) continue;
@@ -568,6 +580,8 @@ function updateEnemies(r, dt, t) {
     const d = c.def;
     let tgt = e.target ? G.structures[e.target] : null;
     if (tgt && (tgt.state === 'broken' || tgt.layer !== L || rectDist(e, tgt, sizeOf(tgt)) > ENGAGE + 0.3)) tgt = null;
+    // a wall under attack is abandoned as soon as the map changes and a route exists again (§7.7: attack only while blocked)
+    if (tgt && !r.targetSet.has(tgt.uid) && c.pathVer !== ver && t - c.repathAt >= REPATH_S) { repath(r, e, c, t); if (!c.brecha) tgt = null; }
     if (!tgt) { e.target = null; moveEnemy(r, e, c, d, dt, t); tgt = e.target ? G.structures[e.target] : null; }
     if (tgt) attack(r, e, c, d, tgt, dt, dmgMul);
     else if (e.cd > 0) e.cd = Math.max(0, e.cd - dt);
@@ -737,7 +751,7 @@ function updateTurrets(r, dt) {
     if (target) inst.aim = Math.atan2(target.y - cy, target.x - cx);
     const needPower = !!(def.power && def.power.use), oc = inst.oc | 0;
     let ratio = 1;
-    if (needPower) { setDemand(inst, target ? def.power.use * Math.pow(2, oc) : 0); ratio = powerRatio(inst); }
+    if (needPower) { setDemand(inst, target ? def.power.use : 0); ratio = powerRatio(inst); }   // base watts: Power applies 2^oc
     const period = 1 / (T.rate || 1);
     let state = 'idle';
     if (!target) inst._cd = Math.min(inst._cd || 0, period);

@@ -7,7 +7,7 @@ const A = LD.Audio = {
   stats: { voices: 0, loops: 0, beds: 0, nodes: 0 }
 };
 
-const VOICE_CAP = 24, RATE_CAP = 12, LOOK = 0.12, LOOP_BUDGET = 60;
+const VOICE_CAP = 24, RATE_CAP = 12, LOOK = 0.12, MAX_LOOPS = 12, FIRST_EVENT = 0.18, CEILING = 0.89 /* −1 dBFS */;
 const FADE_IN = 0.15, FADE_OUT = 0.4, BED_XFADE = 3;
 let ctx = null;
 const vol = { master: 0.8, music: 0.6, sfx: 0.8, ambient: 0.6 };
@@ -66,6 +66,8 @@ Graph.prototype = {
   free(at) {
     const t = Math.max(now(), at || 0);
     for (const s of this.srcs) { try { s.stop(t + 0.02); } catch (e) { /* already stopped */ } }
+    // a suspended clock never reaches `at`: past a small backlog, release inaudible graphs at once
+    if (ctx.state !== 'running' && reap.length > 64) { this._kill(); return; }
     reap.push({ g: this, at: t + 0.05 });
   },
   _kill() { for (const n of this.nodes) { try { n.disconnect(); } catch (e) { /* detached */ } } A.stats.nodes -= this.nodes.length; this.nodes.length = 0; this.srcs.length = 0; }
@@ -79,6 +81,8 @@ function env(param, t, peak, a, d, floor) {
   param.setTargetAtTime(floor || 0, t + Math.max(0.001, a), Math.max(0.004, d / 4));
 }
 function pulse(param, t, peak, d) { param.setValueAtTime(peak, t); param.setTargetAtTime(0, t + 0.002, Math.max(0.003, d / 4)); }
+// click-free on/off gate for a tonal source: 4 ms ramps instead of value steps
+function gate(param, t, d, v) { param.setValueAtTime(0, t); param.linearRampToValueAtTime(v, t + 0.004); param.setValueAtTime(v, t + Math.max(0.006, d - 0.004)); param.linearRampToValueAtTime(0, t + Math.max(0.01, d)); }
 function glide(param, t, f0, f1, d, exp) {
   param.cancelScheduledValues(t); param.setValueAtTime(Math.max(0.01, f0), t);
   if (exp) param.exponentialRampToValueAtTime(Math.max(0.01, f1), t + d); else param.linearRampToValueAtTime(f1, t + d);
@@ -120,9 +124,9 @@ function click(g, dest, t, peak, f) {
 /* ── one-shots: build(g, out, t, p) returns the duration in seconds; p = pitch multiplier ── */
 const SFX = {
   ui_click: { g: 0.35, b(g, o, t, p) { click(g, o, t, 0.5, 3000); tone(g, o, t, { f: 1200 * p, peak: 0.25, d: 0.03 }); return 0.08; } },
-  ui_hover: { g: 0.06, b(g, o, t, p) { tone(g, o, t, { f: 1800 * p, peak: 0.3, a: 0.002, d: 0.012 }); return 0.04; } },
-  ui_open: { g: 0.3, send: 0.08, b(g, o, t, p) { burst(g, o, t, { kind: 'pink', f: 600 * p, f2: 3200 * p, q: 1.2, peak: 0.5, a: 0.01, d: 0.13 }); tone(g, o, t, { f: 500 * p, f2: 900 * p, peak: 0.08, a: 0.01, d: 0.1 }); return 0.25; } },
-  ui_close: { g: 0.3, send: 0.08, b(g, o, t, p) { burst(g, o, t, { kind: 'pink', f: 3200 * p, f2: 500 * p, q: 1.2, peak: 0.5, a: 0.01, d: 0.13 }); tone(g, o, t, { f: 900 * p, f2: 480 * p, peak: 0.08, a: 0.01, d: 0.1 }); return 0.25; } },
+  ui_hover: { g: 0.15, b(g, o, t, p) { tone(g, o, t, { f: 1800 * p, peak: 0.3, a: 0.002, d: 0.012 }); return 0.04; } },
+  ui_open: { g: 0.45, send: 0.08, b(g, o, t, p) { burst(g, o, t, { kind: 'pink', f: 600 * p, f2: 3200 * p, q: 1.2, peak: 0.5, a: 0.01, d: 0.13 }); tone(g, o, t, { f: 500 * p, f2: 900 * p, peak: 0.08, a: 0.01, d: 0.1 }); return 0.25; } },
+  ui_close: { g: 0.45, send: 0.08, b(g, o, t, p) { burst(g, o, t, { kind: 'pink', f: 3200 * p, f2: 500 * p, q: 1.2, peak: 0.5, a: 0.01, d: 0.13 }); tone(g, o, t, { f: 900 * p, f2: 480 * p, peak: 0.08, a: 0.01, d: 0.1 }); return 0.25; } },
   ui_tab: { g: 0.3, b(g, o, t, p) { click(g, o, t, 0.4, 2500); tone(g, o, t, { f: 900 * p, peak: 0.2, d: 0.04 }); tone(g, o, t + 0.045, { f: 1300 * p, peak: 0.18, d: 0.05 }); return 0.14; } },
   build_place: { g: 0.55, send: 0.1, b(g, o, t, p) {
     tone(g, o, t, { f: 95 * p, f2: 42 * p, peak: 0.9, a: 0.004, d: 0.19 });
@@ -134,7 +138,7 @@ const SFX = {
     const bell = (t0, f) => { fm(g, o, t0, { f, ratio: 2.76, index: 1.1, idecay: 0.25, peak: 0.35, a: 0.003, d: 0.6 }); tone(g, o, t0, { f: f * 2.01, peak: 0.06, d: 0.3 }); };
     bell(t, 587 * p); bell(t + 0.16, 880 * p);
     return 1.0; } },
-  dismantle: { g: 0.5, send: 0.08, b(g, o, t, p) {
+  dismantle: { g: 0.36, send: 0.08, b(g, o, t, p) {
     for (let i = 0; i < 6; i++) burst(g, o, t + i * 0.038 + rnd(0, 0.02), { f: rnd(1200, 2800) * p, q: 3, peak: 0.35, d: 0.03 });
     tone(g, o, t + 0.26, { f: 120 * p, f2: 40 * p, peak: 0.8, a: 0.004, d: 0.17 });
     burst(g, o, t + 0.26, { kind: 'brown', type: 'lowpass', f: 600, f2: 100, peak: 0.5, d: 0.12 });
@@ -148,7 +152,7 @@ const SFX = {
     [523, 659, 784, 1046].forEach((f, i) => { tone(g, o, t + i * 0.03, { f: f * p, det: rnd(-6, 6), peak: 0.22, a: 0.02, d: 1.1 }); tone(g, o, t + i * 0.03, { f: f * 2.005 * p, peak: 0.05, a: 0.05, d: 0.7 }); });
     return 1.8; } },
   discover: { g: 0.3, send: 0.35, b(g, o, t, p) { fm(g, o, t, { f: 1318 * p, ratio: 3.01, index: 0.6, idecay: 0.1, peak: 0.3, d: 0.35 }); fm(g, o, t + 0.07, { f: 1975 * p, ratio: 3.01, index: 0.6, idecay: 0.1, peak: 0.22, d: 0.4 }); return 0.7; } },
-  wave_warning: { g: 0.55, send: 0.3, b(g, o, t, p) {
+  wave_warning: { g: 0.26, send: 0.3, b(g, o, t, p) {
     const lp = g.filter('lowpass', 160, 3), gn = g.gain(0); lp.connect(gn); gn.connect(o);
     for (const [f, det] of [[55, 0], [55, 9], [82.5, -5], [110, 4]]) g.osc('sawtooth', f * p, det).connect(lp);
     tone(g, o, t, { f: 41 * p, peak: 0.5, a: 0.3, d: 0.9 });
@@ -205,7 +209,7 @@ const SFX = {
     burst(g, o, t, { kind: 'brown', type: 'lowpass', f: 700, f2: 150, peak: 0.5, d: 0.1 });
     burst(g, o, t + 0.03, { f: 1100 * p, f2: 350 * p, q: 1.2, peak: 0.4, a: 0.02, d: 0.28 });
     return 0.5; } },
-  shot_cannon: { g: 0.7, send: 0.3, b(g, o, t, p) {
+  shot_cannon: { g: 0.42, send: 0.3, b(g, o, t, p) {
     tone(g, o, t, { f: 85 * p, f2: 28 * p, peak: 1, a: 0.003, d: 0.4 }); tone(g, o, t, { f: 42 * p, peak: 0.5, a: 0.02, d: 0.5 });
     burst(g, o, t, { type: 'lowpass', f: 1400, f2: 120, q: 0.7, peak: 0.8, d: 0.35 });
     burst(g, o, t, { f: 2200, q: 0.8, peak: 0.25, d: 0.05 });
@@ -223,7 +227,7 @@ const SFX = {
     const s = g.osc('sawtooth', 100 * p), lp = g.filter('lowpass', 900, 2), gn = g.gain(0); s.connect(lp); lp.connect(gn); gn.connect(o);
     env(gn.gain, t, 0.22, 0.005, 0.2);
     return 0.4; } },
-  shot_plasma: { g: 0.6, send: 0.25, b(g, o, t, p) {
+  shot_plasma: { g: 0.4, send: 0.25, b(g, o, t, p) {
     tone(g, o, t, { f: 130 * p, f2: 34 * p, peak: 0.9, a: 0.004, d: 0.36 });
     fm(g, o, t, { f: 90 * p, ratio: 0.5, index: 5, idecay: 0.2, peak: 0.3, d: 0.25 });
     burst(g, o, t, { type: 'highpass', f: 4000, q: 0.5, peak: 0.35, a: 0.01, d: 0.32 });
@@ -247,7 +251,7 @@ const SFX = {
     burst(g, o, t, { f: 3000 * p, q: 2, peak: 0.15, a: 0.02, d: 0.25 });
     return 0.5; } },
   crystal_chime: { g: 0.3, send: 0.5, b(g, o, t, p) { [1, 2.4, 3.9].forEach((r, i) => tone(g, o, t + i * 0.01, { f: 1046 * r * p, peak: 0.25 / (1 + i), a: 0.005, d: 1.0 - i * 0.2 })); return 1.4; } },
-  magma_roar: { g: 0.5, send: 0.4, b(g, o, t, p) {
+  magma_roar: { g: 0.3, send: 0.4, b(g, o, t, p) {
     burst(g, o, t, { kind: 'brown', type: 'lowpass', f: 250, q: 1.5, peak: 1.1, a: 0.15, d: 1.0 });
     const s = g.osc('sawtooth', 45 * p), lp = g.filter('lowpass', 180, 2), gn = g.gain(0); s.connect(lp); lp.connect(gn); gn.connect(o);
     g.lfo(7, 15, s.frequency); env(gn.gain, t, 0.35, 0.2, 1.0);
@@ -289,9 +293,16 @@ function bubbler(g, P, o) {
   P.rand(o.min, o.max, t => { const f = rnd(o.f0, o.f1); glide(osc.frequency, t, f, f * (o.rise || 1.6), o.d || 0.06, true); pulse(gn.gain, t, (o.v || 0.2) * rnd(0.4, 1), o.d || 0.06); });
   return gn;
 }
+// harmonic hum with slow amplitude wobble and sub-Hz pitch drift so it never reads as a static test tone
 function hum(g, P, f, v, parts) {
   const gn = g.gain(v); gn.connect(P.out);
-  (parts || [1, 0.5, 0.25]).forEach((a, i) => { const o = g.osc(i ? 'triangle' : 'sine', f * (i + 1)), h = g.gain(a); o.connect(h); h.connect(gn); });
+  const dr = g.osc('sine', rnd(0.05, 0.11)), drift = g.gain(f * 0.004); dr.connect(drift);
+  (parts || [1, 0.5, 0.25]).forEach((a, i) => {
+    const o = g.osc(i ? 'triangle' : 'sine', f * (i + 1)), h = g.gain(a); o.connect(h); h.connect(gn);
+    drift.connect(o.frequency);
+    if (i) g.lfo(rnd(0.13, 0.31), a * 0.35, h.gain);
+  });
+  g.lfo(rnd(0.17, 0.29), v * 0.12, gn.gain);
   return gn;
 }
 function chuffer(g, P, rate, v, knock) {
@@ -304,8 +315,8 @@ function chuffer(g, P, rate, v, knock) {
 }
 function creak(h, dest, t, f, v, d) { burst(h, dest, t, { f: f || 420, f2: (f || 420) * 1.4, q: 12, peak: v || 0.4, a: 0.03, d: d || 0.22 }); tone(h, dest, t, { f: (f || 420) * 0.5, f2: (f || 420) * 0.7, gd: d || 0.22, type: 'triangle', peak: (v || 0.4) * 0.35, a: 0.03, d: d || 0.22 }); return (d || 0.22) + 0.3; }
 function hammerHit(h, dest, t, f, v) {
-  fm(h, dest, t, { f, ratio: 3.53, index: 1.6, idecay: 0.06, peak: v * 0.6, d: 0.14 });
-  tone(h, dest, t, { f: 110, f2: 50, peak: v, d: 0.09 }); click(h, dest, t, v * 0.6, 3000);
+  fm(h, dest, t, { f, ratio: 3.53, index: 1.6, idecay: 0.06, peak: v * 0.5, d: 0.14 });
+  tone(h, dest, t, { f: 110, f2: 50, peak: v * 0.7, d: 0.09 }); click(h, dest, t, v * 0.3, 3000);
   burst(h, dest, t, { type: 'lowpass', f: 1200, f2: 200, peak: v * 0.5, d: 0.06 });
   return 0.4;
 }
@@ -362,11 +373,12 @@ const LOOPS = {
     P.every(2, 0.05, t => {
       w.frequency.setValueAtTime(280, t); w.frequency.linearRampToValueAtTime(520, t + 1.2); w.frequency.setTargetAtTime(280, t + 1.3, 0.1);
       wg.gain.setValueAtTime(0.06, t); wg.gain.linearRampToValueAtTime(0.16, t + 1.2); wg.gain.setTargetAtTime(0.06, t + 1.3, 0.1);
-      P.hit((h, t0) => { tone(h, P.out, t0, { f: 130, f2: 55, peak: 0.7, d: 0.14 }); click(h, P.out, t0, 0.5, 2500); burst(h, P.out, t0 + 0.05, { kind: 'pink', type: 'highpass', f: 2500, peak: 0.25, a: 0.01, d: 0.25 }); return 0.5; }, t + 1.25);
+      P.hit((h, t0) => { tone(h, P.out, t0, { f: 130, f2: 55, peak: 0.6, d: 0.14 }); click(h, P.out, t0, 0.25, 2500); burst(h, P.out, t0 + 0.05, { kind: 'pink', type: 'highpass', f: 2500, peak: 0.25, a: 0.01, d: 0.25 }); return 0.5; }, t + 1.25);
     });
   },
   lathe(g, P) {
     const m = g.osc('sawtooth', 120), lp = g.filter('lowpass', 400, 1), mg = g.gain(0.16); m.connect(lp); lp.connect(mg); mg.connect(P.out);
+    g.lfo(0.37, 1.8, m.frequency); g.lfo(0.21, 60, lp.frequency); g.lfo(0.29, 0.025, mg.gain);
     const w = g.osc('sine', 3200), wg = g.gain(0.03); w.connect(wg); wg.connect(P.out); g.lfo(5, 80, w.frequency); g.lfo(0.5, 0.02, wg.gain);
     g.bed('white', 'bandpass', 4000, 3, 0.05).connect(P.out);
   },
@@ -379,7 +391,7 @@ const LOOPS = {
   },
   assembler(g, P) {
     const b = g.osc('square', 900), bl = g.filter('lowpass', 2000, 1), bg = g.gain(0); b.connect(bl); bl.connect(bg); bg.connect(P.out);
-    P.rand(0.4, 1.2, t => { const f = rnd(600, 1400); b.frequency.setValueAtTime(f, t); b.frequency.setValueAtTime(f * rnd(0.7, 1.4), t + 0.05); bg.gain.setValueAtTime(0.05, t); bg.gain.setValueAtTime(0, t + rnd(0.06, 0.12)); });
+    P.rand(0.4, 1.2, t => { const f = rnd(600, 1400); b.frequency.setValueAtTime(f, t); b.frequency.setValueAtTime(f * rnd(0.7, 1.4), t + 0.05); gate(bg.gain, t, rnd(0.06, 0.12), 0.05); });
     const cg = crackler(g, P, { f: 4500, type: 'highpass', q: 0.7, v: 0, min: 99, max: 99 });
     P.every(1.5, 0.3, t => { for (let i = 0; i < 3; i++) pulse(cg.gain, t + i * 0.07, 0.3, 0.008); });
     P.every(2.1, 0.4, t => P.hit((h, t0) => { burst(h, P.out, t0, { kind: 'pink', type: 'lowpass', f: 800, peak: 0.35, a: 0.004, d: 0.06 }); return 0.2; }, t));
@@ -399,8 +411,8 @@ const LOOPS = {
     g.bed('pink', 'highpass', 3000, 0.7, 0.05).connect(P.out);
   },
   electrolyzer(g, P) {
-    const f = g.bed('white', 'highpass', 5000, 0.7, 0.12); f.connect(P.out); g.lfo(13, 0.06, f.gain, 'square');
-    crackler(g, P, { f: 6000, type: 'highpass', q: 0.7, v: 0.2, min: 0.05, max: 0.2, d: 0.008 });
+    const f = g.bed('white', 'highpass', 3200, 0.7, 0.1); f.connect(P.out); g.lfo(13, 0.05, f.gain, 'square');
+    crackler(g, P, { f: 4200, type: 'highpass', q: 0.7, v: 0.12, min: 0.05, max: 0.2, d: 0.008 });
     hum(g, P, 100, 0.08, [1, 0.5]);
   },
   centrifuge(g, P) {
@@ -417,7 +429,8 @@ const LOOPS = {
   },
   arc(g, P) {
     const c = g.bed('white', 'bandpass', 2800, 1.5, 0.3); c.connect(P.out); P.flicker = c.gain;
-    const s = g.osc('sawtooth', 100), q = g.osc('square', 50), lp = g.filter('lowpass', 900, 1.5), sg = g.gain(0.22); s.connect(lp); q.connect(lp); lp.connect(sg); sg.connect(P.out);
+    const s = g.osc('sawtooth', 100), q = g.osc('square', 50), lp = g.filter('lowpass', 900, 1.5), sg = g.gain(0.14); s.connect(lp); q.connect(lp); lp.connect(sg); sg.connect(P.out);
+    g.lfo(0.23, 1.2, s.frequency); g.lfo(0.31, 0.6, q.frequency); g.lfo(2.7, 0.03, sg.gain); g.lfo(0.17, 250, lp.frequency);
     P.every(1, 0.8, t => P.hit((h, t0) => { burst(h, P.out, t0, { f: rnd(1500, 3500), q: 0.8, peak: 0.6, d: 0.04 }); tone(h, P.out, t0, { f: 200, f2: 60, peak: 0.3, d: 0.05 }); return 0.15; }, t));
     P.every(0.03, 0.6, t => P.flicker.setValueAtTime(rnd(0.05, 0.4), t));
   },
@@ -456,7 +469,8 @@ const LOOPS = {
     P.send(0.35);
   },
   drill_hand(g, P) {
-    P.every(1 / 1.5, 0.15, t => P.hit((h, t0) => { click(h, P.out, t0, 0.6, 2500); fm(h, P.out, t0, { f: 1400, ratio: 2.9, index: 1.4, idecay: 0.05, peak: 0.3, d: 0.09 }); burst(h, P.out, t0 + 0.01, { f: 2500, q: 2, peak: 0.3, d: 0.04 }); tone(h, P.out, t0, { f: 160, f2: 80, peak: 0.3, d: 0.04 }); return 0.3; }, t));
+    const r = g.bed('brown', 'lowpass', 320, 1, 0.16); r.connect(P.out); g.lfo(1.5, 0.08, r.gain); g.lfo(0.27, 0.03, r.gain);
+    P.every(1 / 1.5, 0.15, t => P.hit((h, t0) => { click(h, P.out, t0, 0.3, 2500); fm(h, P.out, t0, { f: 1400, ratio: 2.9, index: 1.4, idecay: 0.05, peak: 0.3, d: 0.09 }); burst(h, P.out, t0 + 0.01, { f: 2500, q: 2, peak: 0.3, d: 0.04 }); tone(h, P.out, t0, { f: 160, f2: 80, peak: 0.3, d: 0.04 }); return 0.3; }, t));
   },
   drill_steam(g, P) {
     chuffer(g, P, 1.8, 0.45, 0.25);
@@ -468,7 +482,8 @@ const LOOPS = {
     const w = g.osc('sine', 2400), wg = g.gain(0.02); w.connect(wg); wg.connect(P.out); g.lfo(0.7, 60, w.frequency);
   },
   drill_laser(g, P) {
-    const a = g.osc('sine', 220), b = g.osc('sine', 440, 6), hg = g.gain(0.16); a.connect(hg); b.connect(hg); hg.connect(P.out); g.lfo(0.3, 0.04, hg.gain);
+    const a = g.osc('sine', 220), b = g.osc('sine', 440, 6), hg = g.gain(0.11); a.connect(hg); b.connect(hg); hg.connect(P.out); g.lfo(0.3, 0.04, hg.gain);
+    g.lfo(0.09, 2.5, a.frequency); g.lfo(0.13, 4, b.frequency); g.lfo(3.1, 0.015, hg.gain);
     const h = g.bed('pink', 'bandpass', 3000, 1, 0.22); h.connect(P.out); g.lfo(0.5, 0.08, h.gain);
     crackler(g, P, { f: 3200, q: 3, v: 0.2, min: 0.2, max: 0.9, d: 0.02 });
   },
@@ -516,6 +531,7 @@ const LOOPS = {
     P.send(0.3);
   },
   lab(g, P) {
+    const v = g.bed('pink', 'bandpass', 1500, 0.9, 0.05); v.connect(P.out); g.lfo(0.19, 0.015, v.gain); g.lfo(0.07, 300, v.filter.frequency);
     const b = g.osc('sine', 1200), bg = g.gain(0); b.connect(bg); bg.connect(P.out);
     P.every(1.5, 0.6, t => { b.frequency.setValueAtTime(rnd(800, 1800), t); pulse(bg.gain, t, 0.08, 0.05); });
     const pr = g.bed('pink', 'bandpass', 3000, 1.5, 0); pr.connect(P.out);
@@ -528,7 +544,7 @@ const LOOPS = {
   farm(g, P) {
     const r = g.bed('pink', 'bandpass', 2500, 1, 0.14); r.connect(P.out); g.lfo(0.4, 0.06, r.gain);
     const i = g.osc('sine', 4200), im = g.gain(0.5), ig = g.gain(0); i.connect(im); im.connect(ig); ig.connect(P.out); g.lfo(22, 0.5, im.gain, 'square');
-    P.every(1, 0.6, t => { ig.gain.setValueAtTime(Math.random() < 0.5 ? 0.03 : 0, t); i.frequency.setValueAtTime(rnd(3800, 4600), t); });
+    P.every(1, 0.6, t => { if (Math.random() < 0.5) { i.frequency.setValueAtTime(rnd(3800, 4600), t); gate(ig.gain, t, rnd(0.5, 1.1), 0.03); } });
   },
   bonsai(g, P) {
     const r = g.bed('pink', 'bandpass', 3000, 1, 0.05); r.connect(P.out); g.lfo(0.5, 0.03, r.gain);
@@ -559,7 +575,7 @@ const BEDS = {
   surface_night(g, P) {
     [[4300, 30], [4700, 34]].forEach(([f, r]) => {
       const o = g.osc('sine', f), m = g.gain(0.5), e = g.gain(0); o.connect(m); m.connect(e); e.connect(P.out); g.lfo(r, 0.5, m.gain, 'square');
-      P.rand(0.6, 1.6, t => { const d = rnd(0.35, 0.9); e.gain.setValueAtTime(0.028, t); e.gain.setValueAtTime(0, t + d); });
+      P.rand(0.6, 1.6, t => gate(e.gain, t, rnd(0.35, 0.9), 0.028));
     });
     const w = g.bed('brown', 'lowpass', 250, 0.8, 0.3); w.connect(P.out); g.lfo(0.05, 0.1, w.gain);
     g.bed('pink', 'bandpass', 1200, 0.6, 0.03).connect(P.out);
@@ -603,8 +619,9 @@ function makePatch(builder, dest, wet) {
   const g = new Graph(); g.persistent = true;
   const P = {
     g, out: g.gain(0), jobs: [], I: 1, count: 1,
-    every(interval, jitter, fn) { P.jobs.push({ fn, next: now() + rnd(0, interval), int: () => Math.max(0.01, interval * (1 + rnd(-jitter, jitter))) }); },
-    rand(min, max, fn) { P.jobs.push({ fn, next: now() + rnd(0, max), int: () => rnd(min, max) }); },
+    // first event lands within FIRST_EVENT so a machine is audible as soon as it fades in
+    every(interval, jitter, fn) { P.jobs.push({ fn, next: now() + rnd(0.03, Math.min(interval, FIRST_EVENT)), int: () => Math.max(0.01, interval * (1 + rnd(-jitter, jitter))) }); },
+    rand(min, max, fn) { P.jobs.push({ fn, next: now() + rnd(0.03, Math.min(max, FIRST_EVENT)), int: () => rnd(min, max) }); },
     hit(fn, t) { const h = new Graph(); let d = 0.5; try { d = fn(h, t) || 0.5; } catch (e) { d = 0.1; } h.free(t + d); },
     send(a) { g.send(P.out, a, wet); },
     tick(t) { for (const j of P.jobs) { if (j.next < t - 1) j.next = t; let n = 0; while (j.next < t + LOOK && n++ < 64) { j.fn(j.next); j.next += j.int(); } } },
@@ -616,38 +633,55 @@ function makePatch(builder, dest, wet) {
 }
 
 /* ── loop aggregation: one patch per key; loudness = min(1, 0.35 + 0.22·log2(1+count))·intensity ── */
-const LOOP_TRIM = { generator_diesel: 0.75, drill_plasma: 0.8, fusion: 0.85, refinery: 0.85, furnace: 0.9 };
+// LOOP_LEVEL puts a single machine ≈ −34 dBFS RMS (4 dB under the ambience beds); trims equalise the patches (measured)
+const LOOP_LEVEL = 0.5;
+const LOOP_TRIM = {
+  furnace: 0.7, kiln: 1.0, forge: 0.94, hammer: 0.7, saw: 1.28, mill: 0.9, steam: 2.1, boiler: 1.48, crusher: 0.96, press: 1.32, lathe: 1.12, wiremill: 1.54,
+  assembler: 1.98, electric_hum: 0.88, chemical: 0.92, refinery: 0.48, electrolyzer: 0.96, centrifuge: 1.4, compressor: 1.0, arc: 0.42, vacuum: 0.42,
+  enrichment: 1.82, cryo: 0.64, fabricator: 1.9, nano: 1.98, quantum: 0.3, drill_hand: 1.0, drill_steam: 1.02, drill_electric: 0.76, drill_laser: 0.6,
+  drill_plasma: 0.45, pump: 0.98, wheel: 1.36, waterwheel: 1.36, windmill: 2.3, generator_diesel: 0.29, turbine: 1.06, reactor: 0.4, fusion: 0.25,
+  lab: 2.2, turret_charge: 2.5, farm: 2.5, bonsai: 2.5
+};
 const loops = new Map(), pending = new Map();
 let frameNo = 0, resumeAcc = 0;
 function loudness(count, I) { return Math.min(1, 0.35 + 0.22 * Math.log2(1 + count)) * I; }
+// at most MAX_LOOPS patches play at once: the loudest win, a playing patch keeps its slot unless a candidate is clearly louder
+function admit() {
+  const want = []; for (const s of loops.values()) if (s.on) want.push(s);
+  if (want.length <= MAX_LOOPS) { for (const s of want) s.held = false; return; }
+  want.sort((a, b) => (b.loud + (b.P ? 0.12 : 0)) - (a.loud + (a.P ? 0.12 : 0)));
+  for (let i = 0; i < want.length; i++) want[i].held = i >= MAX_LOOPS;
+}
 function updateLoops(t, dt) {
   for (const [key, c] of pending) {
     if (c.count <= 0) continue;
     let s = loops.get(key);
-    if (!s) { s = { key, P: null, fade: 0, loud: 0, seen: 0, missed: 0, on: false, count: 0, I: 0 }; loops.set(key, s); }
+    if (!s) { s = { key, P: null, fade: 0, loud: 0, seen: 0, missed: 0, on: false, held: false, count: 0, I: 0 }; loops.set(key, s); }
     s.seen = frameNo; s.missed = 0; s.on = true; s.loud = loudness(c.count, c.I); s.count = c.count; s.I = c.I;
     c.count = 0; c.I = 0; c.uids.clear();
   }
+  for (const s of loops.values()) if (s.seen !== frameNo && ++s.missed >= 2) s.on = false;
+  admit();
   for (const s of loops.values()) {
-    if (s.seen !== frameNo && ++s.missed >= 2) s.on = false;
-    if (s.on) {
-      if (!s.P) { if (s.fade === 0 && activeNodes() >= LOOP_BUDGET) continue; s.P = makePatch(LOOPS[s.key], A.busses.sfx, 'sfx'); }
+    const play = s.on && !s.held;
+    if (play) {
+      if (!s.P) s.P = makePatch(LOOPS[s.key], A.busses.sfx, 'sfx');
       s.fade = Math.min(1, s.fade + dt / FADE_IN);
     } else s.fade = Math.max(0, s.fade - dt / FADE_OUT);
     if (s.P) {
       s.P.I = s.I; s.P.count = s.count;
-      s.P.out.gain.setTargetAtTime(s.fade * s.loud * (LOOP_TRIM[s.key] || 1), t, 0.04);
+      s.P.out.gain.setTargetAtTime(s.fade * s.loud * LOOP_LEVEL * (LOOP_TRIM[s.key] || 1), t, 0.04);
       s.P.tick(t);
-      if (!s.on && s.fade === 0) { s.P.free(t + 0.1); s.P = null; }
+      if (!play && s.fade === 0) { s.P.free(t + 0.1); s.P = null; }
     }
     if (!s.on && s.fade === 0) loops.delete(s.key);
   }
   A.stats.loops = loops.size;
 }
-function activeNodes() { let n = 0; for (const s of loops.values()) if (s.P) n += s.P.g.nodes.length; return n; }
 
 /* ── beds: slot 'bed' (one at a time) + slot 'overlay' (rain/storm); equal-power crossfade 3 s ── */
 const slots = { bed: { want: null, list: [] }, overlay: { want: null, list: [] } };
+const BED_TRIM = { core: 0.22, abyss: 0.45, rain: 0.72, storm: 0.7, surface_night: 0.9 };   // every bed ≈ −30 dBFS RMS (measured)
 function updateBeds(t, dt) {
   let n = 0;
   for (const k in slots) {
@@ -656,7 +690,7 @@ function updateBeds(t, dt) {
     for (let i = sl.list.length - 1; i >= 0; i--) {
       const b = sl.list[i], up = b.name === sl.want;
       b.level = up ? Math.min(1, b.level + dt / BED_XFADE) : Math.max(0, b.level - dt / BED_XFADE);
-      b.P.out.gain.setTargetAtTime(Math.sin(b.level * Math.PI / 2), t, 0.05);
+      b.P.out.gain.setTargetAtTime(Math.sin(b.level * Math.PI / 2) * (BED_TRIM[b.name] || 1), t, 0.05);
       b.P.tick(t);
       if (!up && b.level === 0) { b.P.free(t + 0.2); sl.list.splice(i, 1); }
     }
@@ -705,6 +739,12 @@ function playNow(name, opts) {
 }
 
 /* ── public API ── */
+// linear to 0.6, soft knee above, asymptote at CEILING
+function ceilingCurve() {
+  const n = 2049, c = new Float32Array(n), k = CEILING - 0.6;
+  for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1, a = Math.abs(x); c[i] = a <= 0.6 ? x : Math.sign(x) * (0.6 + k * Math.tanh((a - 0.6) / k)); }
+  return c;
+}
 const warned = {};
 function guard(fnName, fn) { return function () { if (!ctx || !A.unlocked) return; try { return fn.apply(null, arguments); } catch (e) { if (!warned[fnName]) { warned[fnName] = true; console.warn('[Audio] ' + fnName + ' failed:', e); } } }; }
 A.init = () => {
@@ -714,9 +754,12 @@ A.init = () => {
     ctx = A.ctx = new AC({ latencyHint: 'interactive' });
     makeBuffers();
     const master = ctx.createGain(); master.gain.value = vcurve(vol.master);
-    const lim = ctx.createDynamicsCompressor(); lim.threshold.value = -8; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.12; lim.knee.value = 4;
-    master.connect(lim); lim.connect(ctx.destination);
-    A.busses.master = master; A.limiter = lim;
+    // master: 8 kHz low-pass (nothing synthesised needs the top octave) → compressor → soft ceiling at −1 dBFS
+    const lpf = ctx.createBiquadFilter(); lpf.type = 'lowpass'; lpf.frequency.value = 8000; lpf.Q.value = 0.6;
+    const lim = ctx.createDynamicsCompressor(); lim.threshold.value = -10; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.12; lim.knee.value = 4;
+    const ceil = ctx.createWaveShaper(); ceil.curve = ceilingCurve(); ceil.oversample = '2x';
+    master.connect(lpf); lpf.connect(lim); lim.connect(ceil); ceil.connect(ctx.destination);
+    A.busses.master = master; A.limiter = lim; A.lowpass = lpf; A.ceiling = ceil;
     for (const b of ['music', 'sfx', 'ambient']) { const gn = ctx.createGain(); gn.gain.value = vcurve(vol[b]); gn.connect(master); A.busses[b] = gn; }
     const conv = ctx.createConvolver(); conv.buffer = buffers.ir;
     const rl = ctx.createBiquadFilter(); rl.type = 'lowpass'; rl.frequency.value = 4200;
@@ -770,6 +813,9 @@ A.stopAll = guard('stopAll', () => {
   voices.length = 0;
 });
 A.has = name => !!(SFX[name] || LOOPS[name] || BEDS[name]);
+// diagnostics (tools/*.mjs): live loop slots and ambience beds
+A.loopState = () => { const r = []; for (const s of loops.values()) r.push({ key: s.key, count: s.count, I: +s.I.toFixed(2), loud: +s.loud.toFixed(2), fade: +s.fade.toFixed(2), on: s.on, held: !!s.held, patch: !!s.P, nodes: s.P ? s.P.g.nodes.length : 0 }); return r; };
+A.bedState = () => { const r = []; for (const k in slots) for (const b of slots[k].list) r.push({ slot: k, name: b.name, level: +b.level.toFixed(2), want: slots[k].want }); return r; };
 A.keys = { sfx: Object.keys(SFX), loops: Object.keys(LOOPS), beds: Object.keys(BEDS) };
 A.noiseBuffer = kind => buffers[kind] || null;
 A.now = now;

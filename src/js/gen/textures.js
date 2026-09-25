@@ -728,6 +728,13 @@ if (typeof location !== 'undefined' && /textest/.test(location.search)) {
         isExcavated(L, cx, cy) { return L === 0 || cx === 0 || (cx === 1 && cy === 1); },
         depositAt(L, x, y) { const t = this.terrainAt(L, x, y); if (!t || /_wall$|water|magma|vent|void/.test(t)) return null; const h = H(x, y, 7 + L); if (h > 0.12) return null; const res = DEPS[(H(x, y, 99) * DEPS.length) | 0]; return { res, amt: H(x, y, 5) < 0.2 ? -1 : 100, max: 100, hardness: 1, fluid: false }; },
         treeAt(L, x, y) { if (L !== 0 || this.terrainAt(L, x, y) !== 'forest') return null; return H(x, y, 3); } };
+    } else if (typeof LD.World.gen === 'function' && !(LD.World.layers && LD.World.layers[0]) && LD.State && typeof LD.State.blank === 'function') {
+      // integrated build: generate a real world (no events) so chunk previews show the actual terrain, deposits and rock
+      try {
+        const G = LD.G || (LD.G = LD.State.blank({ name: 'textest', difficulty: 'normal', seed: 7 }));
+        LD.World.gen(G);
+        for (let L = 1; L < 5; L++) { if (G.layers && G.layers[L]) G.layers[L].unlocked = true; if (typeof LD.World.excavateStart === 'function') LD.World.excavateStart(L, true); }
+      } catch (e) { console.error('[textest] world gen failed', e); }
     }
     if (LD.Registry && LD.Registry.items && !LD.Registry.items.size) {
       const cats = 'raw ore crushed ingot plate rod gear wire part component circuit fluid gas chemical fuel nuclear crystal organic building ammo science exotic'.split(' '), cols = ['#8f8b82', '#b07a4a', '#a8a49c', '#c9a227', '#7f8ea3', '#8fb87a', '#c9603b', '#b28cff', '#d9a441', '#7aa6c9', '#6fa8dc', '#4f8fa8', '#9fb3b8', '#8fb87a', '#e8823a', '#8fcf5a', '#9a7fc0', '#6a9a4a', '#a0785a', '#8f8b82', '#7aa6c9', '#a8f0f8'];
@@ -752,11 +759,21 @@ if (typeof location !== 'undefined' && /textest/.test(location.search)) {
         row.appendChild(box);
       }
       add(layerName(L), row);
-      const t0 = performance.now(), ch = chunkCanvas(L, L === 0 ? 3 : 0, L === 0 ? 2 : 0, 1), t1 = performance.now();
-      const times = []; for (let i = 0; i < 4; i++) { const ta = performance.now(); chunkCanvas(L, L === 0 ? 4 + i : 0, L === 0 ? 3 : 1 + i, 1); times.push(performance.now() - ta); }
-      const t2 = performance.now(), ch2 = chunkCanvas(L, 1, 1, 0.5), t3 = performance.now(), ch3 = chunkCanvas(L, 1, 0, 1), t4 = performance.now();
+      const WL = LD.World.layers[L], ccx = WL && WL.ccx !== undefined ? WL.ccx : (L === 0 ? 3 : 0), ccy = WL && WL.ccy !== undefined ? WL.ccy : (L === 0 ? 2 : 0), cw = WL ? WL.cw : 8, chn = WL ? WL.ch : 6;
+      const t0 = performance.now(), ch = chunkCanvas(L, ccx, ccy, 1), t1 = performance.now();
+      const times = []; for (let i = 0; i < 4; i++) { const ta = performance.now(); chunkCanvas(L, Math.min(cw - 1, ccx + 1), Math.max(0, Math.min(chn - 1, ccy - 1 + i)), 1); times.push(performance.now() - ta); }
+      const t2 = performance.now(), ch2 = chunkCanvas(L, ccx, ccy, 0.5), t3 = performance.now(), ch3 = chunkCanvas(L, 0, 0, 1), t4 = performance.now();
       const cr = U.el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } }, [ch, ch2, L ? ch3 : null]);
       add('CHUNK L' + L + ' · bucket 1 frío: ' + (t1 - t0).toFixed(1) + ' ms · caliente: ' + times.map(t => t.toFixed(1)).join('/') + ' ms · bucket 0.5: ' + (t3 - t2).toFixed(1) + ' ms' + (L ? ' · sin excavar: ' + (t4 - t3).toFixed(1) + ' ms' : ''), cr);
+      // seam check: the junction of four chunks at 100 % pixels for every bucket (chunk borders cross at the centre)
+      const sr = U.el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } });
+      for (const b of [0.5, 1, 2]) {
+        const n = (WL && WL.chunk) || CHUNK, px = n * Math.max(4, Math.round(TILE * b)), view = Math.min(512, px * 2), cv = U.canvas(view, view), cc = cv.getContext('2d');
+        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) cc.drawImage(chunkCanvas(L, ccx + dx, ccy + dy, b), view / 2 + (dx - 1) * px, view / 2 + (dy - 1) * px);
+        cc.strokeStyle = 'rgba(232,64,28,.35)'; cc.setLineDash([2, 4]); cc.strokeRect(0.5, 0.5, view - 1, view - 1);
+        cv.title = 'bucket ' + b; sr.appendChild(cv);
+      }
+      add('JUNTAS L' + L + ' · 4 chunks (' + ccx + ',' + ccy + ')-(' + (ccx + 1) + ',' + (ccy + 1) + ') · bucket 0.5 / 1 / 2', sr);
     }
     const ir = U.el('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' } });
     for (const it of LD.Registry.items.values()) { const b = U.el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' } }); b.appendChild(icon(it.id, 24)); b.appendChild(icon(it.id, 48)); b.appendChild(U.el('div', {}, it.cat)); ir.appendChild(b); if (ir.children.length > 40) break; }

@@ -306,22 +306,33 @@ def('elevator', () => {
 });
 
 def('shaft', () => {
-  const W = P.W, t = P.tier, tr = tierTrim(t), r = P.rnd, cx = W / 2, cy = W * 0.54;
-  cobbles(2, 2, W - 4, W - 4, 8, MAT.stone, r);
-  circle(cx, cy, W * 0.24, MAT.stone.d, MAT.stone.e); circle(cx, cy, W * 0.2, INK, MAT.stone.e);
-  for (let i = 0; i < 10; i++) { const a = i * TAU / 10; line(cx + Math.cos(a) * W * 0.2, cy + Math.sin(a) * W * 0.2, cx + Math.cos(a) * W * 0.24, cy + Math.sin(a) * W * 0.24, rgba(MAT.stone.e, 0.7)); }
-  line(10, W - 10, cx, W * 0.34, tr.e, 6); line(10, W - 10, cx, W * 0.34, tr.f, 4); line(W - 10, W - 10, cx, W * 0.34, tr.e, 6); line(W - 10, W - 10, cx, W * 0.34, tr.f, 4);
-  line(W * 0.3, W * 0.78, W * 0.7, W * 0.78, tr.f, 3);
+  const W = P.W, t = P.tier, tr = t === 2 ? MAT.wood : tierTrim(t), r = P.rnd, cx = W / 2, cy = W * 0.54, pr = W * 0.24;
+  // ground and pit collar follow the tier: cobbles + stone (T2), riveted iron collar (T3), concrete apron + hazard ring (T5), quantum plate + violet ring (T7)
+  if (t >= 5) { const gm = t === 7 ? MAT.quantum : MAT.concrete; plate(2, 2, W - 4, W - 4, gm); seamH(4, W * 0.5, W - 8, gm); seamV(W * 0.5, 4, W - 8, gm); }
+  else cobbles(2, 2, W - 4, W - 4, 8, MAT.stone, r);
+  if (t === 2) { circle(cx, cy, pr, MAT.stone.d, MAT.stone.e); for (let i = 0; i < 10; i++) { const a = i * TAU / 10; line(cx + Math.cos(a) * W * 0.2, cy + Math.sin(a) * W * 0.2, cx + Math.cos(a) * pr, cy + Math.sin(a) * pr, rgba(MAT.stone.e, 0.7)); } }
+  else if (t === 3) { circle(cx, cy, pr, MAT.iron.f, MAT.iron.e); for (let i = 0; i < 12; i++) { const a = i * TAU / 12; dot(cx + Math.cos(a) * W * 0.22, cy + Math.sin(a) * W * 0.22, Math.max(0.6, W * 0.012), MAT.iron.e); } }
+  else if (t === 5) { circle(cx, cy, pr, MAT.steel.f, MAT.steel.e); c.save(); c.beginPath(); c.arc(cx, cy, pr - P.hair, 0, TAU); c.arc(cx, cy, W * 0.205, 0, TAU, true); c.clip(); hatch(cx - pr, cy - pr, pr * 2, pr * 2, Math.max(2, W * 0.03)); c.restore(); }
+  else { circle(cx, cy, pr, MAT.quantum.d, MAT.quantum.e); ring(cx, cy, W * 0.22, Math.max(2, W * 0.03), rgba(VIOLET, 0.16)); ring(cx, cy, W * 0.22, P.hair, rgba(VIOLET, 0.75)); }
+  circle(cx, cy, W * 0.2, INK, t === 2 ? MAT.stone.e : tr.e);
+  // headframe: timber A-frame (T2), iron legs with knee braces (T3), cross-braced gantry (T5, T7)
+  const lw = t >= 5 ? 5 : 4, legs = [[10, W - 10], [W - 10, W - 10]];
+  for (const [lx, ly] of legs) { line(lx, ly, cx, W * 0.34, tr.e, lw + 2); line(lx, ly, cx, W * 0.34, tr.f, lw); if (t === 2) line(lx, ly, cx, W * 0.34, rgba(tr.l, 0.5), P.hair); }
+  if (t === 3) for (const [lx, ly] of legs) { const mx = (lx + cx) / 2, my = (ly + W * 0.34) / 2; line(mx, my, cx, my + W * 0.08, tr.e, 3); line(mx, my, cx, my + W * 0.08, tr.f, 1.6); }
+  if (t >= 5) { const y0 = W * 0.5, y1 = W * 0.86, xa = 10 + (cx - 10) * 0.36, xb = W - 10 - (cx - 10) * 0.36; line(xa, y0, xb, y1, tr.e, 3); line(xb, y0, xa, y1, tr.e, 3); line(xa, y0, xb, y1, tr.f, 1.6); line(xb, y0, xa, y1, tr.f, 1.6); }
+  line(W * 0.3, W * 0.78, W * 0.7, W * 0.78, tr.e, 5); line(W * 0.3, W * 0.78, W * 0.7, W * 0.78, tr.f, 3);
+  if (t === 2) { line(W * 0.3, W * 0.78, W * 0.7, W * 0.78, rgba(tr.l, 0.5), P.hair); for (const x of [W * 0.34, W * 0.66]) { dot(x, W * 0.78, 1.4, tr.e); } }
   machineBody(6, 6, W * 0.4, W * 0.24, undefined, t);
   if (t === 2) { chimney(W * 0.1, W * 0.13, W * 0.05, MAT.iron); cylinder(W * 0.3, W * 0.15, W * 0.06, MAT.iron); }
   else if (t === 3) fins(W * 0.1, W * 0.1, W * 0.2, W * 0.1, 5, false, MAT.iron);
   else if (t === 5) dome(W * 0.18, W * 0.16, W * 0.05, rgba(CYAN, 0.75));
   else ring(W * 0.18, W * 0.16, W * 0.045, 2.2, rgba(VIOLET, 0.75));
-  for (let i = 0; i < 9; i++) dot(W * 0.7 + r() * W * 0.22, W * 0.1 + r() * W * 0.22, W * 0.02 + r() * W * 0.01, i % 3 ? MAT.stone.l : MAT.stone.f);
+  if (t <= 3) for (let i = 0; i < 9; i++) dot(W * 0.7 + r() * W * 0.22, W * 0.1 + r() * W * 0.22, W * 0.02 + r() * W * 0.01, i % 3 ? MAT.stone.l : MAT.stone.f);
+  else { const bx = W * 0.68, by = W * 0.1, bw = W * 0.24, bh = W * 0.2; fillR(bx, by, bw, bh, MAT.dark.f); strokeR(bx, by, bw, bh, MAT.dark.e); for (let i = 0; i < 4; i++) dot(bx + bw * (0.2 + 0.2 * i), by + bh * 0.5, Math.max(0.8, W * 0.012), i < 3 ? rgba(t === 7 ? VIOLET : CYAN, 0.8) : BONE4); }
 }, A => {
-  const W = P.W, cx = W / 2, ph = A.ph, cyc = Math.sin(ph.a * 1.1) * 0.5 + 0.5;
-  wheel(cx, W * 0.34, W * 0.065, 6, ph.a * 2.5, MAT.iron);
-  const y = W * 0.4 + cyc * W * 0.2; line(cx, W * 0.34, cx, y, MAT.rope.f, Math.max(P.hair, 1.2)); fillR(cx - W * 0.05, y, W * 0.1, W * 0.07, MAT.iron.f); strokeR(cx - W * 0.05, y, W * 0.1, W * 0.07, MAT.iron.e);
+  const W = P.W, t = P.tier, cx = W / 2, ph = A.ph, cyc = Math.sin(ph.a * 1.1) * 0.5 + 0.5, wm = t === 2 ? MAT.wood2 : t >= 5 ? MAT.steel : MAT.iron;
+  wheel(cx, W * 0.34, W * 0.065, t === 2 ? 4 : 6, ph.a * 2.5, wm);
+  const y = W * 0.4 + cyc * W * 0.2; line(cx, W * 0.34, cx, y, t === 2 ? MAT.rope.f : MAT.steel.l, Math.max(P.hair, 1.2)); fillR(cx - W * 0.05, y, W * 0.1, W * 0.07, wm.f); strokeR(cx - W * 0.05, y, W * 0.1, W * 0.07, wm.e);
   statusLamp(W - 11, W - 11, Math.max(1.8, W * 0.028), A);
 });
 
@@ -338,6 +349,17 @@ def('tank', () => {
   } else {
     cylinder(cx, cy, R, m);
     if (t === 2) for (let i = 0; i < 18; i++) { const a = i * TAU / 18; dot(cx + Math.cos(a) * R * 0.84, cy + Math.sin(a) * R * 0.84, Math.max(0.6, R * 0.03), m.e); }
+    if (t === 3) {
+      // welded steel: three radial seams and a bolted inspection hatch
+      for (let i = 0; i < 3; i++) { const a = i * TAU / 3 + PI / 6, x0 = cx + Math.cos(a) * R * 0.26, y0 = cy + Math.sin(a) * R * 0.26, x1 = cx + Math.cos(a) * R * 0.82, y1 = cy + Math.sin(a) * R * 0.82; line(x0, y0, x1, y1, m.e, Math.max(P.hair, R * 0.035)); line(x0 + P.hair, y0 + P.hair, x1 + P.hair, y1 + P.hair, rgba(m.l, 0.55)); }
+      const hw = R * 0.34, hh = R * 0.22, hx = cx - R * 0.72, hy = cy - R * 0.62; fillR(hx, hy, hw, hh, m.d); strokeR(hx, hy, hw, hh, m.e); dot(hx + hw * 0.2, hy + hh * 0.5, Math.max(0.5, R * 0.03), m.l); dot(hx + hw * 0.8, hy + hh * 0.5, Math.max(0.5, R * 0.03), m.l);
+    }
+    if (t === 5) {
+      // machined titanium: concentric grooves, hex-bolt ring and a pressure gauge
+      ring(cx, cy, R * 0.62, P.hair, rgba(m.e, 0.6)); ring(cx, cy, R * 0.62 + P.hair, P.hair, rgba(m.l, 0.5)); ring(cx, cy, R * 0.44, P.hair, rgba(m.e, 0.6));
+      for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + PI / 8, bx = cx + Math.cos(a) * R * 0.74, by = cy + Math.sin(a) * R * 0.74; dot(bx, by, Math.max(0.9, R * 0.05), m.e); dot(bx - P.hair * 0.5, by - P.hair * 0.5, Math.max(0.5, R * 0.028), m.l); }
+      dome(cx - R * 0.5, cy - R * 0.5, Math.max(2, R * 0.13), rgba(SKY, 0.8)); line(cx - R * 0.5, cy - R * 0.5, cx - R * 0.56, cy - R * 0.58, BONE, P.hair);
+    }
     if (t === 6) { for (let i = 0; i < 24; i++) { const a = i * TAU / 24; line(cx + Math.cos(a) * R * 0.86, cy + Math.sin(a) * R * 0.86, cx + Math.cos(a) * R * 0.98, cy + Math.sin(a) * R * 0.98, rgba(SKY, 0.8), Math.max(P.hair, R * 0.03)); } circle(cx, cy, R * 0.34, rgba(SKY, 0.14)); }
     if (t === 7) { ring(cx, cy, R * 0.72, Math.max(3, R * 0.12), rgba(VIOLET, 0.14)); ring(cx, cy, R * 0.72, Math.max(1.2, R * 0.04), rgba(VIOLET, 0.7)); }
   }
@@ -1141,10 +1163,12 @@ S.drawOverlay = function (ctx, def, px, py, sizePx, t, inst, nb) {
     ctx.save(); ctx.translate(px + sizePx / 2, py + sizePx / 2); ctx.scale(k, k);
     ctx.strokeStyle = tier === 7 ? rgba(CYAN, 0.55) : rgba(BONE, 0.42); ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.beginPath();
+    // one output arm (the facing direction); every other arm feeds the centre, so its chevrons point inwards
+    const outArm = arms.includes(rot) ? rot : arms[arms.length - 1], straight = isStraight(arms);
     for (const d of arms) {
-      const dx = Math.cos(DIRA[d]), dy = Math.sin(DIRA[d]), sgn = (dx * fx + dy * fy) < 0 ? -1 : 1;
+      const dx = Math.cos(DIRA[d]), dy = Math.sin(DIRA[d]), sgn = d === outArm ? 1 : -1, pMin = straight || sgn > 0 ? 3 : 14;
       for (let i = 0; i < 3; i++) {
-        let p = (i * 8 + off) % 24; if (sgn < 0) p = 24 - p; if (p < 3 || p > 22) continue;
+        let p = (i * 8 + off) % 24; if (sgn < 0) p = 24 - p; if (p < pMin || p > 22) continue;
         const nx = -dy, ny = dx, tipX = dx * (p + 3 * sgn), tipY = dy * (p + 3 * sgn), bx = dx * p, by = dy * p;
         ctx.moveTo(bx + nx * 4.5, by + ny * 4.5); ctx.lineTo(tipX, tipY); ctx.lineTo(bx - nx * 4.5, by - ny * 4.5);
       }

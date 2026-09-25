@@ -51,7 +51,7 @@ const Main = LD.Main = {
 
   continueGame(slot = 'auto') {
     const G = LD.State.load(slot);
-    if (!G) { LD.UI.toast('No hay partida en esa ranura', 'bad'); return null; }
+    if (!G) { if (!LD.State.lastError) LD.UI.toast('No hay partida en esa ranura', 'bad'); return null; }
     LD.Sim.init(G, { fresh: false });
     Main.enterGame();
     const elapsed = G.meta.lastSave ? (Date.now() - G.meta.lastSave) / 1000 : 0;
@@ -80,8 +80,12 @@ const Main = LD.Main = {
   toMenu() {
     if (Main.screen !== 'game') return;
     Main.closeAllOverlays();
+    if (Main.raf) { cancelAnimationFrame(Main.raf); Main.raf = 0; }
     LD.UI.HUD.unmount();
     LD.Audio.stopAll();
+    if (LD.UI.clearToasts) LD.UI.clearToasts();
+    Main.keys.clear();
+    Main.dirty = false;
     LD.G = null;
     Main.showMenu();
   },
@@ -109,8 +113,8 @@ const Main = LD.Main = {
 
   /* ── loop ── */
   loop(now) {
+    if (Main.screen !== 'game' || !LD.G) { Main.raf = 0; return; }
     Main.raf = requestAnimationFrame(Main.loop);
-    if (Main.screen !== 'game' || !LD.G) return;
     const dtReal = Main.last ? Math.min(0.25, (now - Main.last) / 1000) : 1 / 60;
     Main.last = now;
     Main._fpsAcc += dtReal; Main._fpsN++; if (Main._fpsAcc >= 0.5) { Main.fps = Main._fpsN / Main._fpsAcc; Main._fpsAcc = 0; Main._fpsN = 0; }
@@ -127,7 +131,7 @@ const Main = LD.Main = {
     LD.Audio.update(dtReal);
     LD.UI.HUD.update(dtReal);
     const s = LD.Settings.get();
-    if (s.autosave > 0) { Main.autosaveAcc += dtReal; if (Main.autosaveAcc >= s.autosave * 60) { Main.autosaveAcc = 0; LD.State.save('auto'); Main.dirty = false; } }
+    if (s.autosave > 0) { Main.autosaveAcc += dtReal; if (Main.autosaveAcc >= s.autosave * 60) { Main.autosaveAcc = 0; if (LD.State.save('auto')) Main.dirty = false; } }
   },
 
   /* ── input ── */

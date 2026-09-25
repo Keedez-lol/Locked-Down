@@ -361,7 +361,9 @@ const M = LD.Music = {
       p.linearRampToValueAtTime(DUCK, now + 0.12); p.setValueAtTime(DUCK, until); p.linearRampToValueAtTime(1, until + 2);
     } catch (err) { warnOnce('duck', err); }
   },
-  _pump: safePump
+  _pump: safePump,
+  // diagnostics (tools/*.mjs): duck gain and live tracks
+  _state() { return { duck: env ? +env.duck.gain.value.toFixed(3) : null, tracks: live.map(tr => ({ level: tr.level, gain: +tr.gain.gain.value.toFixed(3), fading: tr.fading, nodes: tr.nodes.length, sources: tr.sources.size })) }; }
 };
 
 if (LD.Events && typeof LD.Events.on === 'function') {

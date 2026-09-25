@@ -458,14 +458,21 @@ function genChunkTerrain(lay, cx, cy, seed) {
   return rng;
 }
 function markExcavated(lay, cx, cy, v) { lay.exc[cy * lay.cw + cx] = v ? 1 : 0; }
+// runtime terrain edits (forest seeding) live in G.layers[L].edits and are replayed over the seeded terrain
+function applyEdits(lay, gl, cx, cy) {
+  const ed = gl && gl.edits; if (!ed) return;
+  const c = lay.chunk, x0 = cx === undefined ? 0 : cx * c, y0 = cy === undefined ? 0 : cy * c, x1 = cx === undefined ? lay.w : Math.min(lay.w, x0 + c), y1 = cy === undefined ? lay.h : Math.min(lay.h, y0 + c);
+  for (const k in ed) { const [x, y] = U.unkey(k); if (x >= x0 && y >= y0 && x < x1 && y < y1 && typeof ed[k] === 'string') lay.terrain[y * lay.w + x] = tId(lay, ed[k]); }
+}
 function restoreChunk(lay, gl, cx, cy) {
-  // rebuild an already-excavated chunk from the seed (saves hold only the excavated set and the deposits)
+  // rebuild an already-excavated chunk from the seed (saves hold only the excavated set, the deposits and the edits)
   genChunkTerrain(lay, cx, cy, World.seed);
   markExcavated(lay, cx, cy, 1);
   if (lay.idx === 1 && gl && gl.deposits) {
     const c = lay.chunk, seam = tId(lay, 'coal_seam');
     for (let y = cy * c; y < Math.min(lay.h, cy * c + c); y++) for (let x = cx * c; x < Math.min(lay.w, cx * c + c); x++) { const dp = gl.deposits[U.key(x, y)]; if (dp && dp.res === 'coal') lay.terrain[y * lay.w + x] = seam; }
   }
+  applyEdits(lay, gl, cx, cy);
   lay.dirty.paths = true;
 }
 
@@ -481,7 +488,7 @@ World.gen = function (G) {
   const nLayers = Math.max(5, (LD.Registry && LD.Registry.layers && LD.Registry.layers.length) || 0);
   for (let L = 0; L < nLayers; L++) {
     const lay = allocLayer(L), gl = G.layers && G.layers[L];
-    if (L === 0) { genSurface(lay, seed); if (gl) rollSurfaceDeposits(lay, G, seed); continue; }
+    if (L === 0) { genSurface(lay, seed); if (gl) { rollSurfaceDeposits(lay, G, seed); applyEdits(lay, gl); } continue; }
     lay.terrain.fill(tId(lay, WALL_ID[L]));
     if (!gl) continue;
     gl.excavated = gl.excavated || {}; gl.deposits = gl.deposits || {}; gl.digging = gl.digging || {};
@@ -581,6 +588,7 @@ World.setTerrain = function (L, x, y, id) {
   const lay = World.layers[L]; if (!lay || !inb(lay, x, y) || !id) return false;
   lay.terrain[y * lay.w + x] = tId(lay, id);
   lay.dirty.paths = true;
+  const gl = gLayer(L); if (gl) { if (!gl.edits) gl.edits = {}; gl.edits[U.key(x, y)] = id; }
   const Tex = LD.Tex; if (Tex && typeof Tex.invalidate === 'function') { try { Tex.invalidate(L, x, y); } catch (e) { /* ignore */ } }
   return true;
 };

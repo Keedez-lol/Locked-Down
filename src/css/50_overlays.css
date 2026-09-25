@@ -167,6 +167,8 @@ textarea.ui-input{min-height:8rem;padding:.5rem .6rem;resize:vertical;font:500 .
 .slot::before{content:"";position:absolute;left:0;top:0;bottom:0;width:.125rem;background:var(--verm);opacity:0}
 .slot.current::before{opacity:1}
 .slot.empty{background:transparent}
+.slot.corrupt{border-color:rgba(232,64,28,.45)}
+.slot.corrupt .slot-name{color:var(--verm)}
 .slot-head{display:flex;align-items:baseline;gap:.75rem}
 .slot-tag{flex:none;min-width:4.5rem;font-size:.5625rem;letter-spacing:.16em;color:var(--bone3)}
 .slot-name{flex:1;overflow:hidden;font:500 .875rem/1.3 var(--sans);white-space:nowrap;text-overflow:ellipsis}

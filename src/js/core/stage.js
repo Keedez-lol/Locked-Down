@@ -13,7 +13,6 @@ const Stage = LD.Stage = {
   },
   layout() {
     const vw = Math.max(1, window.innerWidth), vh = Math.max(1, window.innerHeight);
-    const uiScale = 1;
     const scale = Math.min(vw / W, vh / H);
     const w = Math.floor(W * scale), h = Math.floor(H * scale);
     Stage.scale = scale; Stage.width = w; Stage.height = h;
@@ -21,8 +20,8 @@ const Stage = LD.Stage = {
     Stage.dpr = Math.min(2, window.devicePixelRatio || 1);
     const el = Stage.el;
     if (el) { el.style.width = w + 'px'; el.style.height = h + 'px'; el.style.left = Stage.left + 'px'; el.style.top = Stage.top + 'px'; }
-    document.documentElement.style.fontSize = (scale * 16 * uiScale) + 'px';
-    LD.Events.emit('stage:resize', Stage.size());
+    document.documentElement.style.fontSize = (scale * 16) + 'px';
+    if (LD.Events) LD.Events.emit('stage:resize', Stage.size());
   },
   setBackdrop(kind) {
     document.body.classList.toggle('backdrop-paper', kind === 'paper');
@@ -31,8 +30,9 @@ const Stage = LD.Stage = {
   },
   size() { return { w: Stage.width, h: Stage.height, scale: Stage.scale, left: Stage.left, top: Stage.top, dpr: Stage.dpr }; },
   toLogical(clientX, clientY) { return { x: (clientX - Stage.left) / Stage.scale, y: (clientY - Stage.top) / Stage.scale }; },
+  // Backing store matches the floored CSS box × dpr so the canvas is never resampled by a fractional pixel.
   fitCanvas(canvas) {
-    const bw = Math.round(W * Stage.dpr * Stage.scale), bh = Math.round(H * Stage.dpr * Stage.scale);
+    const bw = Math.max(1, Math.round(Stage.width * Stage.dpr)), bh = Math.max(1, Math.round(Stage.height * Stage.dpr));
     if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
     canvas.style.width = '100%'; canvas.style.height = '100%';
     return { bw, bh, k: bw / W };

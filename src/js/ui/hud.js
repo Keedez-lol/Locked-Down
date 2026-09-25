@@ -609,7 +609,7 @@ const HUD = LD.UI.HUD = {
     on('log', p => HUD.pushLog(p));
     on('wave:started', p => { if (p) HUD.waveActive[p.layer] = true; });
     on('wave:ended', p => { if (p) HUD.waveActive[p.layer] = false; });
-    on('power:brownout', p => { if (!p || p.layer === undefined || p.layer === curL()) HUD.brownoutAt = performance.now(); });
+    on('power:brownout', p => { if (!p || p.layer === undefined || p.layer === curL()) { HUD.brownoutAt = performance.now(); if (LD.Audio && LD.Audio.play) LD.Audio.play('brownout'); } });
     on('settings:changed', s => { document.body.classList.toggle('reduced-motion', !!s.reducedMotion); });
     on('game:new', () => HUD.refreshAll());
     on('game:loaded', () => HUD.refreshAll());
