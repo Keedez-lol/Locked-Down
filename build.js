@@ -6,10 +6,10 @@ const ORDER = [
   'core/util.js', 'core/events.js', 'core/registry.js', 'core/state.js', 'core/stage.js',
   'content/items.js', 'content/recipes.js', 'content/structures.js', 'content/techs.js', 'content/enemies.js', 'content/layers.js', 'content/guides.js',
   'gen/textures.js', 'gen/sprites.js', 'gen/world.js',
-  'sim/economy.js', 'sim/power.js', 'sim/build.js', 'sim/research.js', 'sim/nature.js', 'sim/defense.js', 'sim/sim.js',
+  'sim/economy.js', 'sim/fluids.js', 'sim/power.js', 'sim/build.js', 'sim/research.js', 'sim/nature.js', 'sim/defense.js', 'sim/events.js', 'sim/stats.js', 'sim/sim.js',
   'render/particles.js', 'render/render.js',
   'audio/audio.js', 'audio/music.js',
-  'ui/ui.js', 'ui/menu.js', 'ui/hud.js', 'ui/build.js', 'ui/panel.js', 'ui/encyclopedia.js', 'ui/settings.js', 'ui/pause.js',
+  'ui/ui.js', 'ui/menu.js', 'ui/hud.js', 'ui/build.js', 'ui/panel.js', 'ui/encyclopedia.js', 'ui/settings.js', 'ui/pause.js', 'ui/tutorial.js', 'ui/stats.js',
   'vendor/kdz.js',
   'main.js'
 ];
