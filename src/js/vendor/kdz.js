@@ -205,13 +205,12 @@ const ARM_DEG = fixed1(K.armAngle) + '°', LEG_DEG = fixed1(K.legAngle) + '°', 
 const SCALE_TINY = 24, TINY_WEIGHT = 1.6, TINY_RATIO = Math.round(LOCKUP.capStage / SCALE_TINY);
 const DETAIL_ZOOM = 3.5, PANEL_ZOOM = 3;
 const HEADER = [
-  { at: 0, caption: 'FIG. 1  CONSTRUCTION GRID 8 × 8', act: 'ACT I / IV' },
-  { at: CUE.act2, caption: 'FIG. 2  ENTRY  K / D / Z', act: 'ACT II / IV' },
-  { at: CUE.triptych, caption: 'FIG. 2.4  DETAILS B / C / D', act: 'ACT II / IV' },
-  { at: CUE.act3, caption: 'FIG. 3  PERMUTATION  3! = 6', act: 'ACT III / IV' },
-  { at: CUE.act4, caption: 'FIG. 4  LOCKUP', act: 'ACT IV / IV' }
+  { at: 0, caption: 'FIG. 1  CONSTRUCTION GRID 8 × 8' },
+  { at: CUE.act2, caption: 'FIG. 2  ENTRY  K / D / Z' },
+  { at: CUE.triptych, caption: 'FIG. 2.4  DETAILS B / C / D' },
+  { at: CUE.act3, caption: 'FIG. 3  PERMUTATION  3! = 6' },
+  { at: CUE.act4, caption: 'FIG. 4  LOCKUP' }
 ];
-const NUMERALS = ['I', 'II', 'III', 'IV'];
 const COL_INDEX = Array.from({ length: COLS }, (_, i) => String(i + 1).padStart(2, '0'));
 const ROW_INDEX = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const PERMUTATIONS = [[0, 1, 2], [0, 2, 1], [1, 2, 0], [2, 1, 0], [2, 0, 1], [1, 0, 2]];
@@ -1111,10 +1110,9 @@ function composeFrame(t, cycle) {
   for (let i = 1; i < HEADER.length; i++) if (cycle >= HEADER[i].at) h = i;
   paintInk(LAYER.meta, 0.94);
   label(COPY.header, colL(0), 36, 12);
-  label(HEADER[h].act, colR(COLS - 1), 36, 12, STATIC, 1);
   label(HEADER[h].caption, colL(0), 58, 12);
   nbReset();
-  if (cycle >= CUE.act3 && cycle < CUE.act4) { nbText('BEAT '); nbInt(Math.min(BEATS.count - 1, Math.floor((cycle - CUE.act3) / BEAT)) + 1, 1); nbText(COPY.beatTail); nbDraw(colR(COLS - 1), 58, 12, 1); }
+  if (cycle >= CUE.act3 && cycle < CUE.act4) { nbText('BEAT '); nbInt(Math.min(BEATS.count - 1, Math.floor((cycle - CUE.act3) / BEAT)) + 1, 2); nbText(COPY.beatTail); nbDraw(colR(COLS - 1), 58, 12, 1); }
   else label(COPY.loop, colR(COLS - 1), 58, 12, STATIC, 1);
   const fy = H - 46;
   if (cycle < CUE.titleBlock) label(COPY.footer, colL(0), fy, 12, CUE.lead - DURATION);
@@ -1122,13 +1120,6 @@ function composeFrame(t, cycle) {
   const frames = Math.floor(t * 25);
   nbReset(); nbText('TC 00:00:'); nbInt(frames / 25, 2); nbText(':'); nbInt(frames % 25, 2); nbDraw(colR(COLS - 1), fy, 12, 1);
 }
-function composeNumeral(t, cycle) {
-  const act = cycle < CUE.act2 ? 0 : cycle < CUE.act3 ? 1 : cycle < CUE.act4 ? 2 : 3;
-  if (fx.halftone > 0) { paintKnock(LAYER.letters); rect(colL(COLS - 1), CONTENT.y0, CONTENT.x1, rowB(0)); }
-  paintInk(LAYER.meta, 0.94);
-  label(NUMERALS[act], colR(COLS - 1) - TEXT_INSET, rowB(0) - 8, 36, STATIC, 1);
-}
-
 const exitEdge = t => {
   const p = progress(t, CUE.exit, CUE.exitEnd);
   return p >= 1 ? -1e5 : mix(CONTENT.x1 + 12, CONTENT.x0 - 12, easeWipe(p));
@@ -1352,7 +1343,6 @@ uniform sampler2D uImage;
 uniform float uK, uCA, uLoupe;
 uniform vec2 uSize;
 uniform vec3 uBlur;
-uniform vec4 uExempt;
 uniform vec3 uWeights[12];
 uniform int uTaps, uBlurTaps;
 uniform float uMotion;
@@ -1361,8 +1351,7 @@ out vec4 o;
 void main() {
   vec2 d = vUv - .5, a = d * vec2(${(W / H).toFixed(8)}, 1.), e = abs(d);
   float r2 = dot(a, a) / ${((W / H) * (W / H) * 0.25 + 0.25).toFixed(7)};
-  vec2 inLo = smoothstep(uExempt.xy - .012, uExempt.xy, vUv), inHi = 1. - smoothstep(uExempt.zw, uExempt.zw + .012, vUv);
-  float field = (1. - smoothstep(.43, .445, max(e.x, e.y))) * (1. - inLo.x * inLo.y * inHi.x * inHi.y);
+  float field = 1. - smoothstep(.43, .445, max(e.x, e.y));
   float base = (1. + uK * r2) / (1. + uK), spread = (uCA + uLoupe * field) * r2 * r2;
   float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715))));
   vec3 c = vec3(0.);
@@ -1459,7 +1448,7 @@ function initGL() {
     prim: program(VS_PRIM, FS_PRIM(false), 'primitive', ['uOffset', 'uPx', 'uKnock', 'uCutX']),
     primInk: program(VS_PRIM, FS_PRIM(true), 'primitive.ink', ['uOffset', 'uPx', 'uKnock', 'uCutX']),
     print: program(VS_FULL, FS_PRINT, 'print', ['uScene', 'uPaper', 'uPaperOffset', 'uPaperCam', 'uPanelRect', 'uPanelCam', 'uCell', 'uInverted', 'uInvertX', 'uPx', 'uLoupeOn', 'uInk', 'uBone', 'uVerm']),
-    lens: program(VS_FULL, FS_LENS, 'lens', ['uImage', 'uK', 'uCA', 'uLoupe', 'uSize', 'uBlur', 'uMotion', 'uWeights', 'uTaps', 'uBlurTaps', 'uExempt']),
+    lens: program(VS_FULL, FS_LENS, 'lens', ['uImage', 'uK', 'uCA', 'uLoupe', 'uSize', 'uBlur', 'uMotion', 'uWeights', 'uTaps', 'uBlurTaps']),
     bake: program(VS_FULL, FS_BAKE, 'paper', []),
     primVao: gl.createVertexArray(), emptyVao: gl.createVertexArray(), instances: gl.createBuffer(),
     scene: null, printed: null, paper: null
@@ -1480,7 +1469,6 @@ function initGL() {
   gl.useProgram(renderer.lens.p);
   gl.uniform1i(renderer.lens.u.uImage, 0); gl.uniform3fv(renderer.lens.u.uWeights, SPECTRAL_WEIGHTS);
   gl.uniform1f(renderer.lens.u.uK, LENS.k); gl.uniform1f(renderer.lens.u.uCA, LENS.ca);
-  gl.uniform4f(renderer.lens.u.uExempt, 2, 2, 2, 2);
   timer.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
   timer.queries.length = 0; timer.busy.fill(0); timer.head = 0; timer.gpuMs = 0; timer.at = -1e9;
   if (timer.ext) for (let i = 0; i < 4; i++) timer.queries.push(gl.createQuery());
