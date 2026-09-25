@@ -19,7 +19,7 @@ Rama: `claude/exciting-tesla-vgb2ey`. Todo lo listado como "hecho" está en `src
 2. `node tools/validate.js` hasta 0 errores (cadena de progresión completa, todo desbloqueado por exactamente una tecnología).
 3. `node build.js` y `node tools/smoke.mjs` (Chromium en `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`); corregir errores de arranque y de integración; revisar capturas en `tools/out/`.
 4. Revisión adversarial por dimensiones (corrección, balance, estética, audio, rendimiento, guardado) y pases de pulido.
-5. Publicar `dist/index.html` como artefacto y subir.
+5. Publicar `dist/index.html` como artefacto y subir (quitar `dist/` de `.gitignore` cuando exista un build integrado).
 
 ## Notas de integración conocidas
 Ver `docs/INTEGRATION_NOTES.md`. Resumen: convención `_wantPower` = vatios base (Power aplica 2^oc); partículas en píxeles de mundo (casilla·48); `Fluids` solo reconoce pozos/bombas con `nature.out:{water:…}`; extractores de terreno (cantera, arcilla, arena, turba, salinas) van como `nature` con `terrain`; `Render.showRanges` y `Particles.setQuality` ya se propagan desde `main.js`.
