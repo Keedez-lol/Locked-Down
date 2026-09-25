@@ -1002,15 +1002,24 @@ function pipeBase(mask, rot) {
 }
 const OVERLAY = { conveyor: conveyorBase, cable: cableBase, pipe: pipeBase };
 function overlayKind(def) { const k = spriteKey(def); if (OVERLAY[k]) return k; if (def.overlay === 'cable' || def.overlay === 'pipe') return def.overlay; if (def.conveyor) return 'conveyor'; if (def.cable) return 'cable'; if (def.pipe) return 'pipe'; return null; }
-function overlayBase(kind, def, sizePx, mask, rot) {
-  const zoom = sizePx / TILE, b = bucketFor(zoom), tier = U.clamp((def.tier | 0), 0, 7), ck = 'ov:' + kind + ':' + tier + ':' + b + ':' + (mask & 15) + ':' + (mask ? 0 : rot & 1);
+function overlayBase(kind, def, sizePx, mask, rot, cls) {
+  cls = cls || 'n';
+  const zoom = sizePx / TILE, b = bucketFor(zoom), tier = U.clamp((def.tier | 0), 0, 7), ck = 'ov:' + kind + ':' + tier + ':' + b + ':' + (mask & 15) + ':' + (mask ? 0 : rot & 1) + ':' + cls;
   let cv = cacheGet(ck); if (cv) return cv;
   const px = Math.round(TILE * b); cv = U.canvas(px, px);
   const g = cv.getContext('2d'); g.scale(b, b); g.lineCap = 'butt'; g.lineJoin = 'round';
-  const prev = begin(g, makeP(def, TILE, b, 'n'));
-  try { OVERLAY[kind](mask, rot); } catch (err) { console.error('[Sprites] overlay painter failed', err); }
+  const prev = begin(g, makeP(def, TILE, b, cls));
+  try { OVERLAY[kind](mask, rot); if (cls === 'w') paintWorn(false); else if (cls === 'b') paintWorn(true); } catch (err) { console.error('[Sprites] overlay painter failed', err); }
   end(prev); applyNoise(g, px);
   return cacheSet(ck, cv);
+}
+function integrityClass(def, inst) {
+  if (!inst) return 'n';
+  if (inst.state === 'broken') return 'b';
+  if (typeof inst.hp !== 'number') return 'n';
+  const B = LD.Sim && LD.Sim.Build, mx = inst.maxHp || inst._maxHp || def.hp || 0;
+  const integ = B && typeof B.integrity === 'function' ? B.integrity(inst) : (mx > 0 ? inst.hp / mx : 1);
+  return integ < 0.5 ? 'w' : 'n';
 }
 
 /* ── prerender: cached static base, keyed id:bucket:rot:stateClass ── */
@@ -1102,9 +1111,7 @@ S.draw = function (ctx, def, px, py, sizePx, t, inst) {
   const size = Math.max(1, def.size | 0 || 1), W = size * TILE, rot = inst ? (inst.rot | 0) & 3 : 0, state = inst ? (inst.state || 'idle') : 'idle';
   t = t || 0;
   if (state === 'building') return drawBuilding(ctx, def, px, py, sizePx, t, inst, rot);
-  let cls = 'n';
-  if (state === 'broken') cls = 'b';
-  else if (inst && typeof inst.hp === 'number') { const B = LD.Sim && LD.Sim.Build, mx = inst.maxHp || def.hp || 0; const integ = B && typeof B.integrity === 'function' ? B.integrity(inst) : (mx > 0 ? inst.hp / mx : 1); if (integ < 0.5) cls = 'w'; }
+  const cls = integrityClass(def, inst);
   ctx.drawImage(S.prerender(def, sizePx, rot, cls), px, py, sizePx, sizePx);
   const sp = painterFor(key), tilePx = sizePx / size;
   const lod = tilePx >= 40 ? 2 : 1;
@@ -1126,9 +1133,10 @@ S.drawOverlay = function (ctx, def, px, py, sizePx, t, inst, nb) {
   if (!kind) return S.draw(ctx, def, px, py, sizePx, t, inst);
   const rot = inst ? (inst.rot | 0) & 3 : 0, mask = nb ? ((nb.n ? 1 : 0) | (nb.e ? 2 : 0) | (nb.s ? 4 : 0) | (nb.w ? 8 : 0)) : 0;
   if (inst && inst.state === 'building') return drawBuilding(ctx, def, px, py, sizePx, t || 0, inst, rot);
-  ctx.drawImage(overlayBase(kind, def, sizePx, mask, rot), px, py, sizePx, sizePx);
+  const cls = integrityClass(def, inst);
+  ctx.drawImage(overlayBase(kind, def, sizePx, mask, rot, cls), px, py, sizePx, sizePx);
   const k = sizePx / TILE; t = t || 0;
-  if (kind === 'conveyor' && sizePx >= 16) {
+  if (kind === 'conveyor' && sizePx >= 16 && cls !== 'b') {
     const tier = U.clamp(def.tier | 0, 0, 7), speed = [7, 8, 10, 14, 16, 18, 20, 24][tier], arms = armsOf(mask, rot), off = (t * speed) % 8, fx = Math.cos(DIRA[rot]), fy = Math.sin(DIRA[rot]);
     ctx.save(); ctx.translate(px + sizePx / 2, py + sizePx / 2); ctx.scale(k, k);
     ctx.strokeStyle = tier === 7 ? rgba(CYAN, 0.55) : rgba(BONE, 0.42); ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
