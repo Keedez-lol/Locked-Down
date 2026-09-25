@@ -585,8 +585,9 @@ function tick(dt) {
       const def = defOf(inst); if (!def) continue;
       const kind = def.types ? 1 : def.extract ? 2 : def.borer ? 3 : def.elevator ? 4 : 0;
       if (!kind) continue;
-      inst._wantPower = 0;
+      if (!(def.lab && !inst.recipe)) inst._wantPower = 0;
       if (inst.hp <= 0) continue;
+      if (def.lab && !inst.recipe && kind === 1) continue;
       if (inst.paused) { setState(inst, 'paused', null); continue; }
       if (!inst.stats) inst.stats = { made: 0 };
       const r = rtOf(inst.uid);
