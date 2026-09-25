@@ -43,3 +43,7 @@
 ## enemies.js + layers.js (done)
 - magma is an infinite fluid deposit h6 with no dedicated extractor in canon → structures.js must let brine_pump (or a fluid extractor with hardnessMax ≥ 6) pump magma (extract.res include 'magma').
 - Validator needs pumpjack hardnessMax ≥2, gas_well ≥3, brine_pump ≥6, he3_collector ≥7.
+## structures.js (done, 133 defs)
+- Power demand for lamp/warehouse_auto/silo_quantum is never registered by any sim module (harmless, 0 demand) → optional: Build.tick or Economy could setDemand for `def.power.use` structures without types.
+- `elevator` must be in START.structures or unlocked by shaft_coal tech for manual building.
+- rp0–rp5 only consumed by tech costs → techs.js.

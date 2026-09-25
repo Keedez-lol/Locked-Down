@@ -10,12 +10,12 @@ Rama: `claude/exciting-tesla-vgb2ey`. Todo lo listado como "hecho" está en `src
 - Animación del menú: `src/js/vendor/kdz.js` (adaptada, `LD.KDZ.init/start/stop`, exporta `glyphs`/`font`).
 - Motor: `gen/textures.js`, `gen/world.js`, `sim/economy.js`, `sim/sim.js`, `sim/fluids.js`, `sim/power.js`, `sim/build.js`, `sim/research.js`, `sim/nature.js`, `sim/events.js`, `sim/stats.js`, `sim/defense.js`, `render/render.js`, `render/particles.js`, `audio/audio.js`, `audio/music.js`.
 - Interfaz: `ui/ui.js`, `ui/menu.js`, `ui/settings.js`, `ui/pause.js`, `ui/hud.js`, `ui/build.js`, `ui/panel.js`, `ui/encyclopedia.js`, `ui/tutorial.js`, `ui/stats.js` y CSS `10_menu`, `20_hud`, `30_panels`, `40_encyclopedia`, `50_overlays`.
-- Contenido: `content/items.js` (282 objetos), `content/recipes.js` (299 recetas), `content/enemies.js` (15), `content/layers.js` (5 capas + 29 terrenos).
+- Contenido: `content/items.js` (282 objetos), `content/recipes.js` (299 recetas), `content/structures.js` (133), `content/enemies.js` (15), `content/layers.js` (5 capas + 29 terrenos).
 - `gen/sprites.js`: completo (todas las claves del canon, 15 enemigos, lockup, galería `?spritetest`).
 - Cuestionario `cuestionario.html` (publicado como artefacto) y `README.md`.
 
 ## Pendiente (en este orden)
-1. Contenido restante: `content/structures.js` (131 estructuras del canon, con los campos que leen `world.js`/`nature.js`/`power.js`: ver `docs/INTEGRATION_NOTES.md`; un agente estaba escribiéndolo al guardar), `content/techs.js` (~100 tecnologías con `time`, `lab`, `LD.Content.START`), `content/guides.js` (artículos de mecánicas, admiten enlaces `[[kind:id]]`).
+1. Contenido restante: `content/techs.js` (~100 tecnologías con `time`, `lab`, `LD.Content.START`), `content/guides.js` (artículos de mecánicas, admiten enlaces `[[kind:id]]`).
 2. `node tools/validate.js` hasta 0 errores (cadena de progresión completa, todo desbloqueado por exactamente una tecnología).
 3. `node build.js` y `node tools/smoke.mjs` (Chromium en `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`); corregir errores de arranque y de integración; revisar capturas en `tools/out/`.
 4. Revisión adversarial por dimensiones (corrección, balance, estética, audio, rendimiento, guardado) y pases de pulido.
