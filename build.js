@@ -31,7 +31,7 @@ const html = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0c0c0d">
 <meta name="color-scheme" content="dark">
-<title>Locked Down</title>
+<title>KDZDUSTRY</title>
 <style>
 ${css}
 </style>
