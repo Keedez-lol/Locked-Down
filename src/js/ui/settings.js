@@ -25,6 +25,7 @@ const renderAudio = () => {
   vol('Música', 'volMusic', 'Pulso del menú y capa musical de cada estrato.');
   vol('Efectos', 'volSfx', 'Máquinas, torretas, interfaz y avisos.');
   vol('Ambiente', 'volAmbient', 'Viento, goteos, zumbido de cristal, vacío.');
+  rows.push(ui.field('Pista del menú', ui.segmented([{ value: 'kdz', label: 'KDZ' }, { value: 'pulse', label: 'Pulso' }], s.menuTrack === 'pulse' ? 'pulse' : 'kdz', v => set({ menuTrack: v })), { hint: '«KDZ»: batería, bajo y gancho melódico enganchados a la animación. «Pulso»: la versión minimalista anterior.' }));
   const A = LD.Audio;
   const note = A && A.unlocked === false ? 'El audio se activa con la primera pulsación o clic.' : 'Los cambios se aplican al instante.';
   return [ui.section('Volumen', rows), el('p.st-note.dim', note)];

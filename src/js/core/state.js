@@ -10,7 +10,7 @@ const S = LD.Settings = {
   DEFAULTS: {
     volMaster: 0.8, volMusic: 0.6, volSfx: 0.8, volAmbient: 0.6,
     particles: 'high', texture: 'high', grid: false, ranges: false, autosave: 3, reducedMotion: false,
-    tutorial: true, lang: 'es', uiScale: 1, showFps: false
+    tutorial: true, lang: 'es', uiScale: 1, showFps: false, menuTrack: 'kdz'
   },
   data: null,
   get() { if (!S.data) S.load(); return S.data; },
